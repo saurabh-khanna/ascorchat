@@ -1,7 +1,19 @@
 import hmac
 import streamlit as st
 from openai import OpenAI
+import os
 
+# --- Environment Variable Checks ---
+# Check for required environment variables and display errors if not found.
+# This is crucial for deployment and debugging.
+APP_PASSWORD = os.environ.get("APP_PASSWORD")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+if not APP_PASSWORD or not OPENAI_API_KEY:
+    st.error("Missing required environment variables. Please set them before running the app.")
+    st.stop()
+
+# --- Page and Style Configuration ---
 st.set_page_config(page_icon="🤖", page_title="ascorchat", layout="centered")
 
 hide_st_style = """
@@ -41,7 +53,8 @@ def check_password():
 
     def password_entered():
         """Checks whether a password entered by the user is correct."""
-        if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
+        # Use environment variable for the password
+        if hmac.compare_digest(st.session_state["password"], APP_PASSWORD):
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # Don't store the password.
         else:
@@ -72,8 +85,9 @@ def check_password():
 if not check_password():
     st.stop()  # Do not continue if check_password is not True.
 
-# Main Streamlit app starts here
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"], base_url="https://ai-research-proxy.azurewebsites.net")
+# --- Main Streamlit App ---
+# Use environment variable for the OpenAI API key
+client = OpenAI(api_key=OPENAI_API_KEY, base_url="https://ai-research-proxy.azurewebsites.net")
 
 
 st.sidebar.title("🤖 ascorchat")
