@@ -1,0 +1,29 @@
+[theme]
+base = "light"                       # inherit the light preset
+
+# ── Brand accents & neutrals ─────────────────────────────────────────────
+primaryColor            = "#5C6C79"  # cool, slightly blue-ish grey
+backgroundColor         = "#FBFCFD"  # very-pale cool white (page)
+secondaryBackgroundColor= "#EFF1F3"  # light card / widget background
+textColor               = "#1F2429"  # near-black graphite for legibility
+linkColor               = "#5C6C79"  # match primary so links are on-brand
+codeBackgroundColor     = "#F7F9FA"  # gentle panel for code blocks
+
+# ── Typography ───────────────────────────────────────────────────────────
+font        = "sans-serif"           # body & UI text
+codeFont    = "monospace"            # explicit monospace for code
+headingFont = "sans-serif"           # keep headings consistent (serif if you want contrast)
+
+# Optional: host your own web font (remove “#” and enable static serving)
+# [[theme.fontFaces]]
+# font   = "Inter"
+# url    = "static/fonts/Inter-VariableFont_slnt,wght.woff2"
+# weight = 400
+# style  = "normal"
+
+# ── Layout polish ────────────────────────────────────────────────────────
+baseRadius        = "4px"            # small, crisp rounding on components
+borderColor       = "#D8DBDE"        # subtle divider grey
+showWidgetBorder  = true             # outline inputs for clarity
+baseFontSize      = 16               # root font size (px)
+showSidebarBorder = true             # faint vertical rule between sidebar & body
