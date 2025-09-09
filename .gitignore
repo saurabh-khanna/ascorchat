@@ -196,3 +196,6 @@ cython_debug/
 # Streamlit
 secrets.toml
 .env
+
+# MacOS
+.DS_Store
