@@ -42,8 +42,7 @@ if not st.session_state.get("password_correct", False):
             }
             </style>
             <p>
-            <b>ascorchat</b> is a conversational AI tool being developed for communication science research at the Amsterdam School of Communication Research [<a href="https://ascor.uva.nl/" target="_blank">ASCoR</a>], University of Amsterdam
-            <span class="blinking-underscore2">_</span>
+            <b>ascorchat</b> is a conversational AI tool being developed for communication science research at the Amsterdam School of Communication Research [<a href="https://ascor.uva.nl/" target="_blank">ASCoR</a>], University of Amsterdam<span class="blinking-underscore2">_</span>
             </p>
             """, unsafe_allow_html=True)
     st.write("&nbsp;")
