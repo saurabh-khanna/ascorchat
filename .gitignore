@@ -199,4 +199,3 @@ secrets.toml
 
 # MacOS
 .DS_Store
-secret_home.py
