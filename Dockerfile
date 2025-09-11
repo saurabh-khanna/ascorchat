@@ -1,7 +1,7 @@
 FROM python:3.12.3-bullseye
 SHELL ["/bin/bash", "-c"]
 
-# Base environment settings (similar to Appliku's example)
+# Base environment settings
 ENV PIP_NO_CACHE_DIR=off \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PYTHONUNBUFFERED=1 \
@@ -9,7 +9,7 @@ ENV PIP_NO_CACHE_DIR=off \
     SERVER_NAME=0.0.0.0 \
     PORT=8501
 
-# System dependencies (kept close to your sample; you can trim later)
+# System dependencies
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     nano python3-pip gettext chrpath libssl-dev libxft-dev \
@@ -17,7 +17,7 @@ RUN apt-get update \
     curl \
  && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip/setuptools (gunicorn not needed for Streamlit, so omitted)
+# Upgrade pip/setuptools
 RUN pip install --upgrade pip setuptools
 
 WORKDIR /app
