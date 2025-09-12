@@ -16,7 +16,12 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-
+    
+    env:
+      STREAMLIT_SERVER_PORT: 8501
+      APP_PASSWORD: 123
+      OPENAI_API_KEY: sk-123
+      
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python 3.11
