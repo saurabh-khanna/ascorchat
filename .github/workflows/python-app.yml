@@ -30,7 +30,33 @@ jobs:
     - name: Make script executable
       run: chmod +x streamlit.sh
 
-    - name: Smoke run Streamlit app
+    - name: Smoke run
+      shell: bash
       run: |
-        echo "Running Streamlit app via streamlit.sh..."
-        ./streamlit.sh
+        set -euo pipefail
+
+        # Start in its own process group so we can kill the whole tree
+        setsid ./streamlit.sh > streamlit-linux.log 2>&1 &
+        APP_PID=$!
+        PGID=$(ps -o pgid= $APP_PID | tr -d ' ')
+        echo "Started streamlit.sh with PID $APP_PID (PGID $PGID)"
+
+        # Wait up to 20
+        for i in {1..20}; do
+          if curl -fsS http://127.0.0.1:${STREAMLIT_SERVER_PORT} >/dev/null 2>&1; then
+            echo "Streamlit responded on port ${STREAMLIT_SERVER_PORT}"
+            break
+          fi
+          sleep 1
+        done
+
+        # Let it breathe a bit so imports happen, then kill the group
+        sleep 3
+        echo "Stopping process group $PGID..."
+        kill -TERM -$PGID || true
+        sleep 3
+        # If anything is still alive, SIGKILL the group
+        pkill -KILL -g $PGID || true
+
+        # Print last lines for quick context
+        tail -n 50 streamlit-linux.log || true
