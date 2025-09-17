@@ -199,3 +199,6 @@ secrets.toml
 
 # MacOS
 .DS_Store
+
+# R projects
+*.Rproj
