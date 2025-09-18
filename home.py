@@ -13,6 +13,10 @@ if not APP_PASSWORD or not OPENAI_API_KEY:
     st.error("Missing required environment variables. Please set them before running the app.")
     st.stop()
 
+# --- Get User ID ---
+
+uid = st.query_params["id"]
+
 # --- Setting Up RAG ---
 from llama_index.core import StorageContext, load_index_from_storage
 from llama_index.core.settings import Settings
@@ -52,7 +56,7 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-st.title("🤖 ascorchat")
+st.title(f"🤖 ascorchat (ID: {uid})")
 
 st.write("&nbsp;")
 
