@@ -16,6 +16,33 @@ if not APP_PASSWORD or not OPENAI_API_KEY:
 # --- Get User ID ---
 uid = st.query_params["id"]
 
+# --- Setting Up RAG ---
+from llama_index.core import StorageContext, load_index_from_storage
+from llama_index.core.settings import Settings
+from llama_index.llms.litellm import LiteLLM
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+storage_context = StorageContext.from_defaults(persist_dir="context")
+index = load_index_from_storage(storage_context)
+
+llm = LiteLLM(
+    model="openai/nf-gpt-4o",
+    api_base="https://ai-research-proxy.azurewebsites.net/v1",
+    api_key=OPENAI_API_KEY,
+    request_timeout=60,
+)
+
+embed_model = OpenAIEmbedding(
+    model="text-embedding-ada-002",
+    api_base="https://ai-research-proxy.azurewebsites.net/v1",
+    api_key=OPENAI_API_KEY,
+)
+
+Settings.llm = llm
+Settings.embed_model = embed_model
+
+qe = index.as_query_engine()
+
 # --- Page and Style Configuration ---
 st.set_page_config(page_icon="🤖", page_title="ascorchat", layout="centered")
 
@@ -117,19 +144,17 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 if prompt := st.chat_input("Ask anything"):
-    if prompt.strip():  # Check if the message is not empty or just spaces
+    if prompt.strip():
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            stream = client.chat.completions.create(
-                model=st.session_state["openai_model"],
-                messages=[
-                    {"role": m["role"], "content": m["content"]}
-                    for m in st.session_state.messages
-                ],
-                stream=True,
-            )
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            try:
+                with st.spinner("Thinking…"):
+                    result = qe.query(prompt)  # RAG call
+                    response_text = getattr(result, "response", None) or str(result)
+                st.markdown(response_text)
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
+            except Exception as e:
+                st.error(f"Something went wrong: {e}")
