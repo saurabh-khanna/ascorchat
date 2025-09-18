@@ -1,21 +1,41 @@
-FROM python:3.12.3-bullseye
-SHELL ["/bin/bash", "-c"]
-ENV PIP_NO_CACHE_DIR off
-ENV PIP_DISABLE_PIP_VERSION_CHECK on
-ENV PYTHONUNBUFFERED 1
-ENV PYTHONDONTWRITEBYTECODE 0
-RUN apt-get update \
- && apt-get install -y --force-yes \
- nano python3-pip gettext chrpath libssl-dev libxft-dev \
- libfreetype6 libfreetype6-dev  libfontconfig1 libfontconfig1-dev\
- && rm -rf /var/lib/apt/lists/*
-RUN pip install --upgrade pip && pip install --upgrade setuptools && pip install gunicorn
-WORKDIR /code/
-COPY ./code/requirements.txt /code/
-RUN pip install -r requirements.txt
-COPY ./code/ /code/
-COPY ./env/ /env/
-RUN source /env/envs_export.sh && if [ -n "$BUILD_COMMAND" ]; then eval $BUILD_COMMAND; fi
-RUN source /env/envs_export.sh && export && if [ -f "manage.py" ]; then if [ "$DISABLE_COLLECTSTATIC" == "1" ]; then echo "collect static disabled"; else echo "Found manage.py, running collectstatic" && python manage.py collectstatic --noinput; fi;  else echo "No manage.py found. Skipping collectstatic."; fi;
-RUN useradd -ms /bin/bash code
-USER code
+# Use Python 3.11 slim image for smaller size and compatibility
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies including curl for health checks
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better Docker layer caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create a non-root user for security
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
+
+# Expose the port Streamlit runs on
+EXPOSE 8501
+
+# Health check
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+
+# Default environment variables for Streamlit
+ENV SERVER_NAME=0.0.0.0
+ENV PORT=8501
+
+# Run the Streamlit application
+CMD ["streamlit", "run", "--server.address", "0.0.0.0", "--server.port", "8501", "--browser.serverAddress", "0.0.0.0", "home.py"]
