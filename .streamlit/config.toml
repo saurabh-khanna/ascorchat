@@ -27,3 +27,6 @@ borderColor       = "#D8DBDE"        # subtle divider grey
 showWidgetBorder  = true             # outline inputs for clarity
 baseFontSize      = 16               # root font size (px)
 showSidebarBorder = true             # faint vertical rule between sidebar & body
+
+[browser]
+gatherUsageStats = false
