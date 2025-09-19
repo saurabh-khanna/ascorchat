@@ -4,8 +4,6 @@ from openai import OpenAI
 import os
 
 # --- Environment Variable Checks ---
-# Check for required environment variables and display errors if not found.
-# This is crucial for deployment and debugging.
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
@@ -16,32 +14,43 @@ if not APP_PASSWORD or not OPENAI_API_KEY:
 # --- Get User ID ---
 uid = st.query_params["id"]
 
-# --- Setting Up RAG ---
+# --- Setting Up RAG (with cached worker) ---
 from llama_index.core import StorageContext, load_index_from_storage
 from llama_index.core.settings import Settings
 from llama_index.llms.litellm import LiteLLM
 from llama_index.embeddings.openai import OpenAIEmbedding
 
-storage_context = StorageContext.from_defaults(persist_dir="context")
-index = load_index_from_storage(storage_context)
+# Create and cache the worker (query engine) once per process
+@st.cache_resource(show_spinner=False)
+def get_query_engine(persist_dir: str = "context"):
+    """
+    Builds and returns a cached LlamaIndex Query Engine.
+    Reused across Streamlit reruns and sessions until the process restarts
+    or st.cache_resource.clear() is called.
+    """
+    # Configure LLM + embeddings once
+    llm = LiteLLM(
+        model="openai/nf-gpt-4o",
+        api_base="https://ai-research-proxy.azurewebsites.net/v1",
+        api_key=OPENAI_API_KEY,
+        request_timeout=60,
+    )
+    embed_model = OpenAIEmbedding(
+        model="text-embedding-ada-002",
+        api_base="https://ai-research-proxy.azurewebsites.net/v1",
+        api_key=OPENAI_API_KEY,
+    )
+    Settings.llm = llm
+    Settings.embed_model = embed_model
 
-llm = LiteLLM(
-    model="openai/nf-gpt-4o",
-    api_base="https://ai-research-proxy.azurewebsites.net/v1",
-    api_key=OPENAI_API_KEY,
-    request_timeout=60,
-)
+    # Load persisted index and build the worker
+    storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
+    index = load_index_from_storage(storage_context)
+    qe = index.as_query_engine()
+    return qe
 
-embed_model = OpenAIEmbedding(
-    model="text-embedding-ada-002",
-    api_base="https://ai-research-proxy.azurewebsites.net/v1",
-    api_key=OPENAI_API_KEY,
-)
-
-Settings.llm = llm
-Settings.embed_model = embed_model
-
-qe = index.as_query_engine()
+# Use the cached worker
+qe = get_query_engine("context")
 
 # --- Page and Style Configuration ---
 st.set_page_config(page_icon="🤖", page_title="ascorchat", layout="centered")
@@ -115,9 +124,7 @@ if not check_password():
     st.stop()  # Do not continue if check_password is not True.
 
 # --- Main Streamlit App ---
-# Use environment variable for the OpenAI API key
 client = OpenAI(api_key=OPENAI_API_KEY, base_url="https://ai-research-proxy.azurewebsites.net")
-
 
 st.sidebar.title("🤖 ascorchat")
 st.sidebar.write("")
@@ -138,6 +145,23 @@ if "openai_model" not in st.session_state:
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+    st.session_state.messages.append({
+        "role": "system",
+        "content": (
+    "You are a neutral assistant that answers questions about the Dutch national election.\n"
+    "Use only the uploaded party programs as your knowledge base.\n"
+    "If the answer is not in the documents, say: “I don’t know based on the party programs I have.”\n"
+    "Always compare positions across parties when more than one program is available.\n"
+    "Be factual, concise, and neutral.\n"
+    "No speculation or recommendations. Do not make up information.\n"
+    "When relevant, provide short citations in the format [Party, year, page].\n"
+    "Answer format:\n"
+    "Brief summary (2–3 sentences).\n"
+    "By party: bullet points of each party’s position, with citations.\n"
+    "Note missing info (“Party X does not mention this”).")
+    })
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -152,7 +176,15 @@ if prompt := st.chat_input("Ask anything"):
         with st.chat_message("assistant"):
             try:
                 with st.spinner("Thinking…"):
-                    result = qe.query(prompt)  # RAG call
+                    # RAG call via cached worker
+                    try:
+                        result = qe.query(prompt)
+                    except Exception as e:
+                        # If something went wrong with the cached worker, clear and rebuild once
+                        st.cache_resource.clear()
+                        qe = get_query_engine("context")
+                        result = qe.query(prompt)
+
                     response_text = getattr(result, "response", None) or str(result)
                 st.markdown(response_text)
                 st.session_state.messages.append({"role": "assistant", "content": response_text})
