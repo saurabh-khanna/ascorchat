@@ -127,6 +127,21 @@ CONDITIONS = [
 # ── Study title (shown in the browser tab and as the page heading) ────────────
 STUDY_TITLE = "surveychat"
 
+# ── Welcome / instruction message shown above the chat input ─────────────────
+#
+#   Leave as an empty string "" for no message (default).
+#   Set to a sentence or short paragraph to orient participants before they
+#   start chatting - useful for informed consent reminders, task instructions,
+#   or framing the conversation topic.
+#
+#   Example:
+#       WELCOME_MESSAGE = (
+#           "Welcome. In this part of the study you will have a short "
+#           "conversation with an AI assistant about climate change. "
+#           "When you are done, click the End button to receive your transcript."
+#       )
+WELCOME_MESSAGE = ""
+
 # ── Debug mode ────────────────────────────────────────────────────────────────
 #
 #   DEBUG_MODE = True   →  A subtitle under the app title shows which condition
@@ -152,8 +167,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Clean, minimal stylesheet inspired by academic UI conventions.
-# Uses Inter for UI chrome and keeps color palette to near-black + greys.
+# Clean, minimal stylesheet — accent colors driven by the Streamlit theme
+# (config.toml primaryColor / textColor) via CSS custom properties so the
+# CSS never needs to be edited when the palette changes.
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
@@ -172,14 +188,14 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 /* App header */
 .app-header {
-    border-bottom: 2px solid #1a1a2e;
+    border-bottom: 2px solid var(--primary-color);
     padding-bottom: 0.65rem;
     margin-bottom: 1.5rem;
 }
 .app-title {
     font-size: 1.35rem;
     font-weight: 600;
-    color: #1a1a2e;
+    color: var(--text-color);
     letter-spacing: -0.4px;
     margin: 0;
 }
@@ -189,15 +205,27 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     margin-top: 0.2rem;
 }
 
+/* Welcome / instruction banner */
+.welcome-banner {
+    background: var(--secondary-background-color);
+    border-left: 4px solid var(--primary-color);
+    border-radius: 0 6px 6px 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    margin-bottom: 1.25rem;
+    line-height: 1.55;
+}
+
 /* Transcript panel */
 .transcript-banner {
-    background: #f9fafb;
+    background: var(--secondary-background-color);
     border: 1px solid #e5e7eb;
-    border-left: 4px solid #1a1a2e;
+    border-left: 4px solid var(--primary-color);
     border-radius: 0 8px 8px 0;
     padding: 0.8rem 1.1rem;
     font-size: 0.85rem;
-    color: #374151;
+    color: var(--text-color);
     margin-bottom: 1.25rem;
 }
 </style>
@@ -310,7 +338,7 @@ subtitle_html = (
 )
 st.markdown(
     f'<div class="app-header">'
-    f'<div class="app-title">💬 {STUDY_TITLE}</div>'
+    f'<div class="app-title">{STUDY_TITLE}</div>'
     f'{subtitle_html}'
     f'</div>',
     unsafe_allow_html=True,
@@ -333,6 +361,13 @@ if not st.session_state["chat_ended"] and st.session_state["has_sent_message"]:
 
 # ── Active chat ───────────────────────────────────────────────────────────────
 if not st.session_state["chat_ended"]:
+
+    # Optional welcome / instruction message
+    if WELCOME_MESSAGE:
+        st.markdown(
+            f'<div class="welcome-banner">{WELCOME_MESSAGE}</div>',
+            unsafe_allow_html=True,
+        )
 
     # Render conversation history
     for message in st.session_state["messages"]:

@@ -32,6 +32,7 @@ Built for researchers who want to study how chatbot style, tone, or framing affe
 | **End Chat + transcript** | A participant-facing "End" button (two-click confirmation) reveals a copyable JSON transcript |
 | **Debug mode** | Toggle `DEBUG_MODE = True` while testing to confirm which condition is active |
 | **No database** | Nothing is written to disk or sent to a database - all state is held in the server session |
+| **Welcome message** | Optional instruction text shown above the chat, configurable per deployment |
 
 ---
 
@@ -166,6 +167,22 @@ Change this if you switch providers. Available model names depend on your endpoi
 
 ```python
 STUDY_TITLE = "surveychat"   # shown in browser tab and as the page heading
+```
+
+### Welcome message
+
+```python
+WELCOME_MESSAGE = ""   # leave empty for no message
+```
+
+An optional instruction shown above the chat input for the duration of the conversation. Use this to give participants task instructions, framing, or a brief informed-consent reminder without needing a separate Qualtrics page:
+
+```python
+WELCOME_MESSAGE = (
+    "Welcome. In this part of the study you will have a short conversation "
+    "with an AI assistant about climate change. "
+    "When you are done, click the End button to receive your transcript."
+)
 ```
 
 ### Debug mode
