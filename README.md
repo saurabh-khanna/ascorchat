@@ -1,6 +1,9 @@
 # 💬 surveychat
 
-A lightweight Python app for running **chatbot surveys and experiments**. 
+[![Open Source Love](https://badges.frapsoft.com/os/v1/open-source.svg?v=103)](https://github.com/ellerbrock/open-source-badges/)
+![GitHub License](https://img.shields.io/github/license/surveychat/surveychat)
+
+A lightweight Python application for running **surveys and experiments with AI chatbots**. 
 
 surveychat works in two modes:
 

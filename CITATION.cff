@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the article from preferred-citation."
+title: "surveychat"
+type: software
+authors:
+  - family-names: Khanna
+    given-names: Saurabh
+    orcid: "https://orcid.org/0000-0002-9346-4896"
+    affiliation: "University of Amsterdam"
+license: AGPL-3.0
+repository-code: "https://github.com/surveychat/surveychat"
+preferred-citation:
+  type: article
+  title: "surveychat: Chatbot Interface for Surveys and Randomized Experiments"
+  authors:
+    - family-names: Khanna
+      given-names: Saurabh
+      orcid: "https://orcid.org/0000-0002-9346-4896"
+  year: 2026
+  journal: "Journal of Open Source Software"
