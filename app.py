@@ -159,15 +159,6 @@ KEY_ENTRY_PROMPT = (
     "Please enter the session code you received in the survey to begin."
 )
 
-# ── Debug mode ────────────────────────────────────────────────────────────────
-#
-#   DEBUG_MODE = True   →  A subtitle under the app title shows which condition
-#                          this participant was assigned to.  Useful when testing
-#                          that randomization and system prompts are working.
-#   DEBUG_MODE = False  →  No subtitle is shown.  Use this for real surveys so
-#                          participants cannot see the condition label.
-DEBUG_MODE = True
-
 # ╔═════════════════════════════════════════════════════════════════════════════╗
 # ║  END OF RESEARCHER CONFIGURATION - no edits needed below this line        ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
@@ -221,11 +212,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     color: #1F2429;
     letter-spacing: -0.4px;
     margin: 0;
-}
-.app-subtitle {
-    font-size: 0.8rem;
-    color: #9ca3af;
-    margin-top: 0.2rem;
 }
 
 /* Welcome / instruction banner */
@@ -380,25 +366,10 @@ client = get_client(OPENAI_API_KEY, API_BASE_URL)
 #  MAIN CHAT INTERFACE
 # =============================================================================
 
-# ── Header ───────────────────────────────────────────────────────────────────────
-if DEBUG_MODE:
-    if "condition_index" in st.session_state:
-        _debug_label = CONDITIONS[st.session_state["condition_index"]]["name"]
-    elif _key_routing:
-        _debug_label = "awaiting session code…"
-    else:
-        _debug_label = ""
-    subtitle_html = (
-        f'<div class="app-subtitle">Testing: {_debug_label}</div>'
-        if _debug_label else ""
-    )
-else:
-    subtitle_html = ""
-
+# ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(
     f'<div class="app-header">'
     f'<div class="app-title">💬 {STUDY_TITLE}</div>'
-    f'{subtitle_html}'
     f'</div>',
     unsafe_allow_html=True,
 )
