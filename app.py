@@ -1,27 +1,112 @@
 # =============================================================================
-#  surveychat - A/B Testing Chatbot Platform for Research
+#  surveychat - Chatbot Surveys and Randomized Experiments
 # =============================================================================
 #
 #  PURPOSE
 #  -------
-#  surveychat lets you run A/B (or multi-arm) conversational experiments.
-#  Each incoming participant is randomly assigned to one of N chatbot
-#  "conditions", where each condition is defined by a unique system prompt
-#  and model choice.  When N = 1 there is no randomization - every
-#  participant sees the same chatbot, making it suitable for simple surveys.
+#  surveychat supports two use modes:
+#
+#  Survey mode  (N_CONDITIONS = 1)
+#    Every participant talks to the same chatbot.  No passcodes, no
+#    randomization.  Use this for open-ended interviews, cognitive
+#    interviewing, pilot testing, or any qualitative data collection that
+#    benefits from a conversational format rather than a plain text box.
+#    Examples: exploratory interviews, pilot testing, cognitive debriefs,
+#    and any study where adaptive follow-up questions driven by participant
+#    responses would produce richer data than a fixed question list.
+#
+#  Experiment mode  (N_CONDITIONS >= 2)
+#    Participants are routed to one of N chatbot "conditions", each defined
+#    by a unique system prompt and model choice.  Use this for A/B tests or
+#    multi-arm studies that compare how different chatbot styles affect
+#    participant responses, attitudes, or behaviour.
+#    Examples: comparing empathetic vs. neutral interviewers, testing
+#    different question orderings, or manipulating response thoroughness.
+#
+#  In both modes the participant chats, clicks End, and copies a JSON
+#  transcript back into the parent survey tool (e.g. Qualtrics).
+#
+#  TRANSCRIPT FORMAT
+#  -----------------
+#  After clicking End, the participant receives a JSON block:
+#
+#      {
+#        "messages": [
+#          {
+#            "role":      "participant",
+#            "content":   "Hello!",
+#            "timestamp": "2026-03-06T14:22:01.123456+00:00"
+#          },
+#          {
+#            "role":      "assistant",
+#            "content":   "Hi there, how can I help you today?",
+#            "timestamp": "2026-03-06T14:22:03.456789+00:00"
+#          }
+#        ]
+#      }
+#
+#  Timestamps are UTC ISO-8601 with an explicit +00:00 offset so they are
+#  unambiguous across time zones.  Condition name and model are deliberately
+#  excluded so participants cannot infer their assigned arm.
+#
+#  Parse in Python:
+#      import json, pandas as pd
+#      data = json.loads(transcript_string)
+#      df   = pd.DataFrame(data["messages"])   # one row per turn
+#
+#  Parse in R:
+#      library(jsonlite)
+#      data <- fromJSON(transcript_string)
+#      df   <- as.data.frame(data$messages)    # one row per turn
+#
+#  INTEGRATION WITH SURVEY TOOLS
+#  ------------------------------
+#  Survey mode:
+#    (1) Add a Text / Graphic block in Qualtrics with a link to the app.
+#    (2) After the chat, add a Text Entry question where participants
+#        paste their transcript.
+#
+#  Experiment mode:
+#    (1) Use Qualtrics Survey Flow > Randomizer to split participants.
+#    (2) In each arm display the matching passcode and the app URL.
+#    (3) After the chat, add a Text Entry question for the transcript.
+#    (4) Export responses — treatment assignment is recovered from the
+#        passcode stored in the relevant Qualtrics branch variable.
+#
+#  DEPLOYMENT OPTIONS
+#  ------------------
+#  Local development:
+#      streamlit run app.py
+#
+#  Streamlit Community Cloud (free, no server needed):
+#      Push the repo to GitHub, connect at share.streamlit.io, and add
+#      OPENAI_API_KEY under Advanced settings → Secrets.
+#
+#  Cloud VM (e.g. AWS EC2, DigitalOcean, Azure):
+#      pip install -r requirements.txt
+#      streamlit run app.py --server.port 80 --server.headless true
+#      Serve HTTPS via Caddy or nginx (required for Qualtrics iFrame embeds).
+#
+#  LLM PROVIDERS
+#  -------------
+#  Set API_BASE_URL to any OpenAI-compatible endpoint:
+#      Standard OpenAI:   https://api.openai.com/v1
+#      Azure via LiteLLM: https://your-proxy.azurewebsites.net
+#      OpenRouter:        https://openrouter.ai/api/v1
+#      Local (LiteLLM):   http://localhost:4000
 #
 #  QUICK START
 #  -----------
-#  1. Edit the RESEARCHER CONFIGURATION section below (clearly marked).
-#  2. Add your OPENAI_API_KEY to the .env file (see .env for format).
+#  1. Edit the RESEARCHER CONFIGURATION section below.
+#  2. Add your OPENAI_API_KEY to the .env file (see .env.example).
 #  3. Run:   streamlit run app.py
 #
 #  FORKING & REUSE
 #  ---------------
 #  This file is intentionally self-contained.  The only section you need
-#  to touch for most studies is the RESEARCHER CONFIGURATION block below.
-#  Everything else (session management, participant routing, UI) is handled
-#  for you automatically.
+#  to edit for most studies is the RESEARCHER CONFIGURATION block below.
+#  Everything else — session management, participant routing, transcript
+#  export, and the chat UI — is handled for you automatically.
 #
 # =============================================================================
 
@@ -40,6 +125,161 @@ from dotenv import load_dotenv          # reads .env into os.environ automatical
 # Load the .env file so that OPENAI_API_KEY is available via os.environ
 # even when the app is run without pre-exporting it in the shell.
 load_dotenv()
+
+
+# =============================================================================
+#  HELPER FUNCTIONS
+# =============================================================================
+#
+#  Three helper functions used by the main interface below:
+#
+#  validate_passcode_routing(conditions, n_conditions)
+#    Checks that the passcode configuration is internally consistent and
+#    halts the app with an actionable error message if not.  Called during
+#    the configuration-validation phase, before any participant-facing UI
+#    is rendered.
+#
+#  build_api_messages(conversation, system_prompt)
+#    Constructs the full message list sent to the LLM API for each turn,
+#    prepending the hidden system prompt at position 0.
+#
+#  build_transcript(messages)
+#    Formats the conversation history as the JSON transcript object shown
+#    to the participant at the end of the session.
+
+def validate_passcode_routing(conditions: list, n_conditions: int) -> None:
+    """
+    Check passcode-routing configuration and halt the app on any inconsistency.
+
+    Enforces three invariants:
+      1. If any active condition defines a "passcode" field, every active
+         condition must define one (no partial configuration).
+      2. Every passcode value must be a non-empty string after stripping
+         leading and trailing whitespace.
+      3. All passcodes must be unique when compared case-insensitively.
+
+    Any violation triggers a descriptive on-screen error via st.error() and
+    stops execution with st.stop(), so researchers see the problem
+    immediately rather than discovering it mid-study.
+
+    Parameters
+    ----------
+    conditions : list[dict]
+        The full CONDITIONS list from the researcher configuration section.
+    n_conditions : int
+        The N_CONDITIONS value.  Only the first n_conditions entries are
+        considered active; any extras are ignored.
+    """
+    active    = conditions[:n_conditions]
+    passcoded = [c for c in active if "passcode" in c]
+
+    # Invariant 1: Partial configuration — some but not all conditions define
+    # a passcode.  Either every arm needs a passcode (passcode routing) or
+    # none do (random routing).  A mixed state is always a mistake.
+    if 0 < len(passcoded) < n_conditions:
+        st.error(
+            f"Passcode routing is partially configured: **{len(passcoded)}** of "
+            f"**{n_conditions}** active conditions have a `\"passcode\"` field. "
+            "Either add a `\"passcode\"` to every condition or remove them all."
+        )
+        st.stop()
+
+    if len(passcoded) == n_conditions:
+        # Invariant 2: No blank passcode strings.
+        if any(not c["passcode"].strip() for c in active):
+            st.error(
+                "One or more condition `\"passcode\"` values are empty strings. "
+                "Every passcode must contain at least one character."
+            )
+            st.stop()
+
+        # Invariant 3: All passcodes must be unique (case-insensitive).
+        passcodes = [c["passcode"].strip().lower() for c in active]
+        if len(passcodes) != len(set(passcodes)):
+            st.error(
+                "Two or more conditions share the same `\"passcode\"` value. "
+                "Every condition must have a unique passcode."
+            )
+            st.stop()
+
+
+def build_api_messages(conversation: list, system_prompt: str) -> list:
+    """
+    Construct the message list to send to the LLM API for a single turn.
+
+    The system prompt is inserted as a {"role": "system"} message at
+    position 0.  Participants never see this text, but it defines the
+    model's entire persona and behavioral instructions for the conversation.
+
+    Only "role" and "content" are forwarded from the conversation history.
+    The "timestamp" key is local-only metadata that the OpenAI API does not
+    accept and would cause a validation error if included.
+
+    Parameters
+    ----------
+    conversation : list[dict]
+        The current value of st.session_state["messages"].  Each element
+        has "role" ("user" or "assistant"), "content", and "timestamp" keys.
+    system_prompt : str
+        The hidden system prompt from the active condition dict.
+
+    Returns
+    -------
+    list[dict]
+        A list of {"role": str, "content": str} dicts ready for the OpenAI
+        chat completions endpoint (or any compatible API).
+    """
+    return (
+        [{"role": "system", "content": system_prompt}]
+        + [
+            {"role": m["role"], "content": m["content"]}
+            for m in conversation
+        ]
+    )
+
+
+def build_transcript(messages: list) -> dict:
+    """
+    Format the conversation history as the transcript object shown after chat ends.
+
+    Returns a JSON-serialisable dict with a single "messages" key.  Each
+    entry carries:
+      - "role"      : "participant" (relabelled from "user") or "assistant"
+      - "content"   : the full text of the message
+      - "timestamp" : UTC ISO-8601 string, e.g. "2026-03-06T14:22:01+00:00"
+
+    Design notes:
+      - "user" is relabelled "participant" so researchers get a domain-
+        appropriate label when parsing the transcript in Python or R.
+      - Condition name and model are intentionally excluded.  In experiment
+        mode, participants must not be able to infer their assigned condition
+        from the transcript they read and manually copy back into the survey.
+        Treatment assignment is recovered separately from the passcode stored
+        in the survey platform's response data.
+      - In survey mode (N_CONDITIONS = 1) there is only one condition, so
+        excluding the name is a no-op, but it keeps the transcript format
+        identical across both modes.
+
+    Parameters
+    ----------
+    messages : list[dict]
+        The current value of st.session_state["messages"].
+
+    Returns
+    -------
+    dict
+        Transcript object suitable for json.dumps(indent=2, ensure_ascii=False).
+    """
+    return {
+        "messages": [
+            {
+                "role":      "participant" if m["role"] == "user" else "assistant",
+                "content":   m["content"],
+                "timestamp": m.get("timestamp", ""),
+            }
+            for m in messages
+        ],
+    }
 
 
 # ╔═════════════════════════════════════════════════════════════════════════════╗
@@ -62,10 +302,22 @@ API_BASE_URL = "https://ai-research-proxy.azurewebsites.net"
 
 # ── How many chatbot conditions does your study have? ─────────────────────────
 #
-#   N_CONDITIONS = 1   →  Single condition (no randomization). Useful when you
-#                          just want a plain survey chatbot for all participants.
-#   N_CONDITIONS = 2   →  Classic A/B test.  Participants split ~50 / 50.
-#   N_CONDITIONS = 3+  →  Multi-arm experiment.  Participants split evenly.
+#   N_CONDITIONS = 1   →  Survey mode.  Every participant talks to the same
+#                          chatbot.  No passcodes or randomization needed.
+#                          The passcode gate screen is suppressed entirely;
+#                          participants go straight to the chat.
+#                          Use this for structured or semi-structured
+#                          interviews, pilot testing, cognitive debriefs, or
+#                          any study where a conversation replaces a plain
+#                          text-entry question.
+#
+#   N_CONDITIONS = 2   →  Experiment mode, classic A/B test.
+#                          Participants are split ~50 / 50 across two
+#                          conditions and enter a passcode to reach their arm.
+#
+#   N_CONDITIONS = 3+  →  Experiment mode, multi-arm.
+#                          Participants are split as evenly as possible across
+#                          all conditions.
 #
 #   Default: 2
 N_CONDITIONS = 2
@@ -73,37 +325,86 @@ N_CONDITIONS = 2
 # ── Define each chatbot condition ─────────────────────────────────────────────
 #
 #  Add one dictionary per condition.  You MUST have at least N_CONDITIONS
-#  entries.  Any extra entries beyond N_CONDITIONS are ignored.
+#  entries.  Any extra entries beyond N_CONDITIONS are silently ignored.
 #
-#  Keys per condition
-#  ------------------
-#  "name"           Short internal label (shown in the debug subtitle).
-#  "key"            Session code that routes participants to this condition.
-#                   Required when N > 1; assign one unique code per condition
-#                   and give each code to Qualtrics so it can display the right
-#                   one to each participant before the chat starts.
-#                   Case-insensitive.  Omit (or leave out) when N = 1.
-#  "system_prompt"  The hidden instruction sent to the model before the
-#                   conversation starts.  Participants never see this text, but
-#                   it shapes the entire personality and behavior of the chatbot.
-#  "model"          The model name for this condition.
-#                   Common options: "gpt-oss-120b", "gpt4o", "gpt4o-mini"
+#  Fields per condition
+#  --------------------
+#  "name"           Short internal label used in log messages and debug info.
+#                   Never shown to participants.  Keep it descriptive enough
+#                   to identify the condition when reviewing data or logs.
 #
-#  Tip: Write system prompts that clearly differ between conditions so your
-#  experimental manipulation is strong and easy to detect in your data.
-#  Tip: Use short, neutral codes ("ALPHA"/"BETA", colours, animals, etc.)
-#  that give no hint of the condition's content.
+#  "passcode"       Passcode that routes participants to this condition.
+#                   Only needed in experiment mode (N_CONDITIONS > 1).
+#                   Assign one unique passcode per condition and configure
+#                   your survey tool to display the correct passcode to each
+#                   participant before they open the chat link.
+#                   Matching is case-insensitive ("alpha" == "ALPHA").
+#                   Omit this field entirely when N_CONDITIONS = 1.
+#
+#  "system_prompt"  The hidden instruction sent to the model at the very
+#                   start of every conversation.  Participants never see
+#                   this text, but it defines the chatbot's entire persona,
+#                   tone, and behavioral boundaries.
+#
+#                   In survey mode, treat this as an interviewer brief:
+#                   describe the study topic, the interview style, how to
+#                   handle off-topic responses, and when to wrap up.
+#
+#                   In experiment mode, make sure the prompts differ clearly
+#                   between conditions so the manipulation is strong and its
+#                   effects are detectable in your outcome measures.
+#
+#  "model"          The model identifier string for this condition.
+#                   Common options:
+#                     "gpt-oss-120b"  — large open-weights model (default proxy)
+#                     "gpt4o"         — GPT-4o via OpenAI or Azure
+#                     "gpt4o-mini"    — GPT-4o Mini, faster and cheaper
+#                   Different conditions can use different models if you want
+#                   to directly compare model-level effects.
+#
+#  Tips
+#  ----
+#  - In experiment mode use short, neutral passcodes ("ALPHA"/"BETA",
+#    colours, animals) that give participants no hint of their condition.
+#  - System prompts work best when they specify tone, task, and limits all
+#    at once.  Vague prompts produce inconsistent behavior across sessions.
+#  - Test each condition manually before launching the study.
+#
+#  Survey mode example (N_CONDITIONS = 1, no "passcode" field needed):
+#  ─────────────────────────────────────────────────────────────────────
+#  CONDITIONS = [
+#      {
+#          "name":          "Social-media interview bot",
+#          "system_prompt": (
+#              "You are a friendly research interviewer studying how people "
+#              "use social media in their daily lives.  Ask one open-ended "
+#              "question at a time, listen carefully, and ask follow-up "
+#              "questions to explore the participant's experience in depth. "
+#              "After 5-7 exchanges, thank the participant warmly and let "
+#              "them know they can click End this chat."
+#          ),
+#          "model": "gpt-oss-120b",
+#      },
+#  ]
 
 CONDITIONS = [
 
     # ── Condition A ───────────────────────────────────────────────────────────
     {
         "name":          "Condition A - Neutral",
-        "key":           "ALPHA",      # session code → routes to this condition
+        "passcode":      "ALPHA",      # routes participants to this condition
         "system_prompt": (
-            "You are a helpful and neutral research assistant. "
-            "Answer all questions clearly and concisely without expressing "
-            "personal opinions or emotional reactions."
+            "You are a neutral, information-focused research assistant participating "
+            "in an academic study. Your role is to respond to the participant's "
+            "messages in a clear, balanced, and factual manner. "
+            "Do not express personal opinions, take sides, or use emotionally charged "
+            "language. Maintain a consistent, professional tone throughout. "
+            "If the participant raises a topic that is subjective or contested, "
+            "present relevant considerations from multiple perspectives without "
+            "endorsing any particular view. "
+            "Keep your responses concise but complete — aim for two to four sentences "
+            "unless the participant explicitly asks for more detail. "
+            "Do not volunteer unsolicited advice or personal anecdotes."
         ),
         "model": "gpt-oss-120b",
     },
@@ -111,22 +412,49 @@ CONDITIONS = [
     # ── Condition B ───────────────────────────────────────────────────────────
     {
         "name":          "Condition B - Empathetic",
-        "key":           "BETA",       # session code → routes to this condition
+        "passcode":      "BETA",       # routes participants to this condition
         "system_prompt": (
-            "You are a warm and empathetic research assistant. "
-            "Acknowledge the user's perspective and respond with care, "
-            "understanding, and emotional sensitivity."
+            "You are a warm, empathetic research assistant participating in an "
+            "academic study. Your role is to make the participant feel genuinely "
+            "heard and understood throughout the conversation. "
+            "Begin each response by briefly acknowledging the participant's "
+            "feelings or perspective before offering any information or asking "
+            "a follow-up question — for example, by reflecting back what they "
+            "said or validating their experience without being patronising. "
+            "Use a conversational, supportive tone. Avoid clinical or bureaucratic "
+            "language. When a participant shares something personal or emotionally "
+            "significant, slow down and engage with that before moving on. "
+            "Keep your responses concise but warm — aim for two to four sentences "
+            "unless the participant explicitly asks for more detail. "
+            "Do not minimise, dismiss, or redirect away from anything the "
+            "participant seems to find important."
         ),
         "model": "gpt-oss-120b",
     },
 
     # ── Add more conditions below by copying the block above ─────────────────
     # {
-    #     "name":          "Condition C - Directive",
-    #     "key":           "GAMMA",
+    #     "name":          "Condition C - Socratic",
+    #     "passcode":      "GAMMA",
     #     "system_prompt": (
-    #         "You are a direct and assertive research assistant. "
-    #         "Give clear, action-oriented guidance without hedging."
+    #         "You are a Socratic research assistant participating in an academic "
+    #         "study. Your role is to help the participant think through topics "
+    #         "more deeply by asking carefully chosen questions rather than "
+    #         "providing answers or information directly. "
+    #         "Never volunteer your own opinion, conclusion, or recommendation. "
+    #         "Instead, respond to each message by reflecting back what the "
+    #         "participant seems to be assuming or implying, then posing one "
+    #         "probing question that invites them to examine that assumption, "
+    #         "consider a counterexample, or articulate their reasoning more "
+    #         "precisely. "
+    #         "Questions should be open-ended and genuinely exploratory — not "
+    #         "leading questions that hint at a preferred answer. "
+    #         "If the participant asks you a direct question, turn it back to them "
+    #         "with a question that helps them work toward their own answer. "
+    #         "Keep the conversational pressure gentle but persistent: always end "
+    #         "your turn with exactly one question, never more. "
+    #         "Do not summarise, conclude, or wrap up the conversation — your goal "
+    #         "is continued, deepening inquiry."
     #     ),
     #     "model": "gpt-oss-120b",
     # },
@@ -138,27 +466,78 @@ STUDY_TITLE = "surveychat"
 
 # ── Welcome / instruction message shown above the chat input ─────────────────
 #
-#   Leave as an empty string "" for no message (default).
-#   Set to a sentence or short paragraph to orient participants before they
-#   start chatting - useful for informed consent reminders, task instructions,
-#   or framing the conversation topic.
+#   Displayed in a shaded banner at the top of the chat interface.  Use it
+#   to orient participants before they start typing.
 #
-#   Example:
+#   Good uses:
+#     - Task framing:  "In this part of the study you will discuss your
+#       recent online shopping experiences with an AI assistant."
+#     - Consent reminder:  "This conversation is recorded as part of a
+#       research study and will be stored securely."
+#     - Behavioural instruction:  "Please respond as you normally would.
+#       There are no right or wrong answers."
+#
+#   Set to "" to show no banner — useful if your Qualtrics page already
+#   provides full instructions before the participant opens the chat link.
+#
+#   HTML is supported — use <strong>, <em>, <br> etc. for emphasis.
+#
+#   Examples:
+#
+#       WELCOME_MESSAGE = ""   # no banner
+#
 #       WELCOME_MESSAGE = (
 #           "Welcome. In this part of the study you will have a short "
 #           "conversation with an AI assistant about climate change. "
-#           "When you are done, click the End button to receive your transcript."
+#           "When you are done, click <strong>End this chat</strong> "
+#           "to receive your transcript."
 #       )
-WELCOME_MESSAGE = ""
-
-# ── Prompt shown on the session-code entry screen (keyword routing only) ─────
 #
-#   Displayed above the code text box when N > 1 and all conditions define a
-#   "key".  Ignored when N = 1.
-KEY_ENTRY_PROMPT = (
-    "Please enter the session code you received in the survey to begin."
+#       WELCOME_MESSAGE = (
+#           "This conversation is part of a research study on AI-assisted "
+#           "decision-making.  Your responses are confidential and will only "
+#           "be used for research purposes.<br><br>"
+#           "When finished, click <strong>End this chat</strong> to copy "
+#           "your transcript and paste it into the survey."
+#       )
+WELCOME_MESSAGE = (
+    "You are about to have a short conversation with an AI assistant. "
+    "When you are finished, click the <strong>End</strong> button to receive your transcript, "
+    "then paste it back into the survey."
 )
 
+# ── Prompt shown on the passcode entry screen (passcode routing only) ──────
+#
+#   Displayed above the passcode text box when N > 1 and all conditions define
+#   a "passcode".  Ignored when N = 1.
+PASSCODE_ENTRY_PROMPT = (
+    "Please enter the passcode you received in the survey to begin chatting."
+)
+
+# ── Configuration reference ───────────────────────────────────────────────────
+#
+#  Variable               Default           Description
+#  ──────────────────────────────────────────────────────────────────────────────
+#  API_BASE_URL           (proxy URL)       Base URL for the LLM API endpoint.
+#  N_CONDITIONS           2                 1 = survey mode, 2 = A/B test,
+#                                           3+ = multi-arm experiment.
+#  CONDITIONS             [A, B]            List of condition dicts.  Each has
+#                                           "name", optional "passcode",
+#                                           "system_prompt", and "model".
+#  STUDY_TITLE            "surveychat"      Browser tab title and page heading.
+#  WELCOME_MESSAGE        (default string)  Banner shown above the chat.
+#                                           Set to "" to hide.
+#  PASSCODE_ENTRY_PROMPT  (default string)  Text above the passcode box.
+#                                           Only shown in experiment mode.
+#  ──────────────────────────────────────────────────────────────────────────────
+#
+#  Routing behaviour summary
+#  ─────────────────────────
+#  N = 1                Survey mode.  No gate, no passcode, direct to chat.
+#  N > 1, no passcode   Random routing.  Condition drawn at random on load.
+#  N > 1, with passcode Passcode routing.  Same passcode → same condition,
+#                       stable across page refreshes.
+#
 # ╔═════════════════════════════════════════════════════════════════════════════╗
 # ║  END OF RESEARCHER CONFIGURATION - no edits needed below this line        ║
 # ╚═════════════════════════════════════════════════════════════════════════════╝
@@ -176,31 +555,38 @@ st.set_page_config(
 )
 
 # Clean, minimal stylesheet — accent colors kept in sync with config.toml.
-# Streamlit applies theme colors through its own CSS-in-JS system and does
-# not inject them as CSS custom properties, so we hardcode the same values
-# here.  If you change the palette in config.toml, update the variables
-# below to match.
+# Streamlit renders its own theme via CSS-in-JS and does not expose theme
+# values as CSS custom properties, so we hardcode the palette here.
+# If you change colors in .streamlit/config.toml, update these too:
 #
-#   PRIMARY   = #5C6C79   (primaryColor)
-#   TEXT      = #1F2429   (textColor)
-#   BG_SEC    = #EFF1F3   (secondaryBackgroundColor)
+#   PRIMARY   = #5C6C79   (primaryColor)             — borders, accents
+#   TEXT      = #1F2429   (textColor)                — body text
+#   BG_SEC    = #EFF1F3   (secondaryBackgroundColor)  — banner backgrounds
 st.markdown("""
 <style>
+/* ── Typography ────────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
+/* Apply Inter to the entire app, overriding Streamlit's default font. */
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-/* Hide Streamlit chrome */
+/* ── Chrome removal ─────────────────────────────────────────────────────────── */
+/* Hide the Streamlit toolbar, footer, and hamburger menu so the page looks
+   like a standalone app rather than a Streamlit dashboard. */
 #MainMenu, footer, header { visibility: hidden; }
 [data-testid="collapsedControl"] { display: none; }
 
-/* Page layout */
+/* ── Page layout ────────────────────────────────────────────────────────────── */
+/* Constrain to a readable column width and reduce default top padding. */
 .block-container { max-width: 740px; padding-top: 2.25rem; padding-bottom: 1rem; }
 
-/* Transcript code block - wrap long lines on narrow screens */
+/* ── Transcript code block ──────────────────────────────────────────────────── */
+/* Wrap long JSON lines so participants on narrow screens can read everything
+   without horizontal scrolling. */
 .stCode pre { white-space: pre-wrap; word-break: break-word; }
 
-/* App header */
+/* ── App header ─────────────────────────────────────────────────────────────── */
+/* A thin rule below the study title separates it visually from the chat. */
 .app-header {
     border-bottom: 2px solid #5C6C79;
     padding-bottom: 0.65rem;
@@ -214,7 +600,9 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     margin: 0;
 }
 
-/* Welcome / instruction banner */
+/* ── Welcome / instruction banner ───────────────────────────────────────────── */
+/* Shown above the chat input when WELCOME_MESSAGE is non-empty.  The left
+   accent border matches the primary color to tie it to the site palette. */
 .welcome-banner {
     background: #EFF1F3;
     border-left: 4px solid #5C6C79;
@@ -226,7 +614,9 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     line-height: 1.55;
 }
 
-/* Transcript panel */
+/* ── Transcript panel ───────────────────────────────────────────────────────── */
+/* Shown after the participant clicks End.  Slightly more prominent border
+   than the welcome banner to draw attention to the copy instruction. */
 .transcript-banner {
     background: #EFF1F3;
     border: 1px solid #e5e7eb;
@@ -252,7 +642,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY or not OPENAI_API_KEY.strip():
     st.error(
         "**OPENAI_API_KEY not found or empty.**  "
-        "Please add it to your `.env` file and restart the app.\n\n"
+        "Please add it to your `.env` file and restart the application.\n\n"
         "Example `.env`:\n```\nOPENAI_API_KEY=sk-...\n```"
     )
     st.stop()
@@ -274,89 +664,111 @@ if len(CONDITIONS) < N_CONDITIONS:
     )
     st.stop()
 
-# Validate keyword-routing configuration when N > 1.
+# Validate passcode-routing configuration when N > 1.
+# Full logic is documented in validate_passcode_routing() above.
 if N_CONDITIONS > 1:
-    _active = CONDITIONS[:N_CONDITIONS]
-    _keyed  = [c for c in _active if "key" in c]
-    if 0 < len(_keyed) < N_CONDITIONS:
-        st.error(
-            f"Keyword routing is partially configured: **{len(_keyed)}** of "
-            f"**{N_CONDITIONS}** active conditions have a `\"key\"` field. "
-            "Either add a `\"key\"` to every condition or remove them all."
-        )
-        st.stop()
-    if len(_keyed) == N_CONDITIONS:
-        if any(not c["key"].strip() for c in _active):
-            st.error(
-                "One or more condition `\"key\"` values are empty strings. "
-                "Every session code must contain at least one character."
-            )
-            st.stop()
-        _keys = [c["key"].strip().lower() for c in _active]
-        if len(_keys) != len(set(_keys)):
-            st.error(
-                "Two or more conditions share the same `\"key\"` value. "
-                "Every condition must have a unique session code."
-            )
-            st.stop()
+    validate_passcode_routing(CONDITIONS, N_CONDITIONS)
 
 
 # =============================================================================
 #  SESSION STATE INITIALIZATION
 # =============================================================================
 #
-#  Streamlit re-runs the entire script on every user interaction, so we
-#  store anything that must persist across reruns in `st.session_state`.
-#  Each `if … not in st.session_state` guard ensures values are set only
-#  once per browser session - i.e. once per participant visit.
+#  Streamlit re-runs the entire script on every user interaction (button
+#  click, chat message, page refresh).  Any Python variable assigned during
+#  one run is lost on the next.  st.session_state is the mechanism for
+#  persisting values across reruns within a single browser session.
+#
+#  Each `if … not in st.session_state` guard ensures values are initialised
+#  exactly once — on the participant's very first page load — and left
+#  unchanged on every subsequent rerun.
 
-# Routing mode:
-#   keyword routing  →  N > 1 and every active condition defines a "key" field.
-#                       Participants enter a session code; same code = same arm,
-#                       so the condition is stable across page refreshes.
-#   random routing   →  N = 1 (always condition 0) or no keys defined.
-#                       Condition is drawn at random on each new session.
-_key_routing = N_CONDITIONS > 1 and all(
-    "key" in CONDITIONS[i] for i in range(N_CONDITIONS)
+# ── Determine routing mode ────────────────────────────────────────────────────
+#
+#  Survey mode      →  N_CONDITIONS = 1.
+#                      No routing step.  Condition index is always 0.
+#                      Participant goes straight to the chat interface.
+#
+#  Passcode routing →  N > 1 AND every active condition defines a "passcode".
+#                      The passcode entry gate is shown before the chat.
+#                      The same passcode always resolves to the same condition
+#                      index, so a participant who refreshes the page and
+#                      re-enters their passcode lands on the same arm —
+#                      without any server-side session storage.
+#
+#  Random routing   →  N > 1 BUT no conditions define a "passcode".
+#                      Condition is drawn uniformly at random on first load.
+#                      A page refresh draws a new condition, so this mode is
+#                      only appropriate when refresh is unlikely or impossible
+#                      (e.g. the survey platform embeds the link once).
+_passcode_routing = N_CONDITIONS > 1 and all(
+    "passcode" in CONDITIONS[i] for i in range(N_CONDITIONS)
 )
 
-# For random/single-condition routing, assign now.
-# For keyword routing, defer until the participant enters their code.
-if not _key_routing and "condition_index" not in st.session_state:
+# ── Assign condition index ────────────────────────────────────────────────────
+#
+#  For survey/random routing, assign immediately.
+#  For passcode routing, defer until the participant enters their passcode;
+#  assignment happens in the passcode-gate block below.
+if not _passcode_routing and "condition_index" not in st.session_state:
     st.session_state["condition_index"] = (
         0 if N_CONDITIONS == 1 else random.randint(0, N_CONDITIONS - 1)
     )
 
-# Tracks whether the session-code gate has been passed.
-# Starts True when no gate is needed (random/single routing).
-if "key_accepted" not in st.session_state:
-    st.session_state["key_accepted"] = not _key_routing
+# ── Per-session flags ─────────────────────────────────────────────────────────
 
-# Track whether the participant has ended the chat session.
-# Once True, the chat input is hidden and the transcript panel is shown.
+# Whether the passcode gate has been passed.
+# Initialised to True when no gate is needed (survey / random routing).
+if "passcode_accepted" not in st.session_state:
+    st.session_state["passcode_accepted"] = not _passcode_routing
+
+# Whether the participant has ended the chat session.
+# Flips to True when they confirm End; triggers the transcript panel.
 if "chat_ended" not in st.session_state:
     st.session_state["chat_ended"] = False
 
-# Two-step end confirmation: first click arms it, second confirms.
-# Prevents accidental loss of the conversation.
+# Two-step end-confirmation flag.
+# First click on "End this chat" sets this to True (arming the confirmation).
+# Second click on "✓ Confirm" sets chat_ended to True and shows the transcript.
+# This prevents accidental chat termination and loss of the conversation.
 if "confirm_end" not in st.session_state:
     st.session_state["confirm_end"] = False
 
-# Flipped to True as soon as the user sends their very first message.
-# Used to reveal the End button immediately after the first turn.
+# Flipped to True the moment the participant sends their first message.
+# The End button is hidden until this is True to avoid showing a useless
+# button before any conversation has happened.
 if "has_sent_message" not in st.session_state:
     st.session_state["has_sent_message"] = False
 
-# Initialize an empty conversation history on first load.
+# The full conversation history for this session.
+# Each item is a dict: {"role": str, "content": str, "timestamp": str}.
+# Grows by one entry per user message and one per assistant reply.
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-# Create and cache the OpenAI client as a global singleton.
-# @st.cache_resource is the correct Streamlit pattern for connection-like
-# objects: it is created once, shared across all reruns and sessions,
-# and never serialized to disk.
+# ── OpenAI client ─────────────────────────────────────────────────────────────
+
 @st.cache_resource
 def get_client(api_key: str, base_url: str) -> OpenAI:
+    """
+    Create and cache a singleton OpenAI client.
+
+    @st.cache_resource creates the object once, shares it across all reruns
+    and browser sessions on the same server, and never serialises it to disk.
+    This is the correct Streamlit pattern for connection-like objects.
+
+    Parameters
+    ----------
+    api_key : str
+        The API key read from the environment (OPENAI_API_KEY).
+    base_url : str
+        The API_BASE_URL set in the researcher configuration.
+
+    Returns
+    -------
+    OpenAI
+        A configured OpenAI client instance.
+    """
     return OpenAI(api_key=api_key, base_url=base_url)
 
 client = get_client(OPENAI_API_KEY, API_BASE_URL)
@@ -365,7 +777,43 @@ client = get_client(OPENAI_API_KEY, API_BASE_URL)
 # =============================================================================
 #  MAIN CHAT INTERFACE
 # =============================================================================
-
+#
+#  The interface is rendered in a single linear pass from top to bottom.
+#  Streamlit's execution model means every widget call below is conditional
+#  on session-state flags set during earlier runs; this drives the multi-step
+#  participant flow:
+#
+#  Stage 1 — Passcode gate  (experiment mode with passcode routing only)
+#    • Displayed when st.session_state["passcode_accepted"] is False.
+#    • A form with a single text input collects the passcode.
+#    • Valid entry maps to a condition index, sets passcode_accepted=True,
+#      and triggers a full rerun so stage 1 is skipped on subsequent runs.
+#    • Invalid entry shows an inline error; the gate remains visible.
+#    • st.stop() at the end of stage 1 prevents any subsequent code from
+#      running until the gate is passed — the chat UI is never rendered
+#      even partially for unauthenticated participants.
+#
+#  Stage 2 — Active chat
+#    • Displayed when chat_ended is False.
+#    • The optional welcome banner is rendered first.
+#    • All messages in st.session_state["messages"] are replayed in order
+#      so the full conversation history is visible on every rerun.
+#    • st.chat_input() blocks further execution until the participant sends
+#      a message; the user message is appended, then the LLM is called.
+#    • The response is streamed token-by-token via st.write_stream() to give
+#      a natural, responsive feel even on slow connections.
+#    • The End button appears in a right-aligned column after the first
+#      exchange.  A two-step confirmation (End → Confirm) prevents
+#      participants from accidentally discarding their conversation.
+#
+#  Stage 3 — Transcript panel
+#    • Displayed when chat_ended is True.
+#    • The transcript banner and JSON code block are rendered.
+#    • Streamlit’s st.code() provides a built-in copy button in the
+#      top-right corner of the block, requiring no custom JavaScript.
+#    • The participant copies the JSON and pastes it back into Qualtrics
+#      (or whichever survey tool they came from).
+#
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(
     f'<div class="app-header">'
@@ -374,13 +822,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Session code entry (keyword routing only) ────────────────────────────────────
-# Shown before the chat until the participant enters a valid code.
-# On page refresh the gate reappears, but the same code always maps to the same
-# condition, so the arm is stable - unlike random routing where refresh re-draws.
-if not st.session_state["key_accepted"]:
-    _key_map = {
-        CONDITIONS[i]["key"].strip().lower(): i
+# ── Passcode entry (experiment mode with passcode routing only) ─────────────
+# Shown before the chat until the participant enters a valid passcode.
+# On page refresh the gate reappears, but the same passcode always maps to the
+# same condition, so assignment is stable across refreshes.
+if not st.session_state["passcode_accepted"]:
+    _passcode_map = {
+        CONDITIONS[i]["passcode"].strip().lower(): i
         for i in range(N_CONDITIONS)
     }
     if WELCOME_MESSAGE:
@@ -390,23 +838,23 @@ if not st.session_state["key_accepted"]:
         )
     st.markdown(
         f'<p style="margin-bottom:1rem;font-size:0.95rem;color:#1F2429">'
-        f'{KEY_ENTRY_PROMPT}</p>',
+        f'{PASSCODE_ENTRY_PROMPT}</p>',
         unsafe_allow_html=True,
     )
     with st.form("key_form"):
-        _code = st.text_input("Session code", placeholder="e.g. ALPHA")
+        _code = st.text_input("Passcode", placeholder="e.g. ALPHA")
         _submitted = st.form_submit_button("Continue →", type="primary")
     if _submitted:
-        _idx = _key_map.get(_code.strip().lower())
+        _idx = _passcode_map.get(_code.strip().lower())
         if _idx is not None:
             st.session_state["condition_index"] = _idx
-            st.session_state["key_accepted"] = True
+            st.session_state["passcode_accepted"] = True
             st.rerun()
         else:
             st.error("Code not recognised. Please check and try again.")
     st.stop()
 
-# Session code accepted (or not required) — condition is now resolved.
+# Passcode accepted (or not required) — condition is now resolved.
 condition = CONDITIONS[st.session_state["condition_index"]]
 
 # ── End Chat button - appears after the first exchange ────────────────────────
@@ -415,7 +863,7 @@ if not st.session_state["chat_ended"] and st.session_state["has_sent_message"]:
     _, end_col = st.columns([5, 1])
     with end_col:
         if not st.session_state["confirm_end"]:
-            if st.button("End", use_container_width=True, type="secondary"):
+            if st.button("End chat", use_container_width=True, type="secondary"):
                 st.session_state["confirm_end"] = True
                 st.rerun()
         else:
@@ -427,14 +875,20 @@ if not st.session_state["chat_ended"] and st.session_state["has_sent_message"]:
 # ── Active chat ───────────────────────────────────────────────────────────────
 if not st.session_state["chat_ended"]:
 
-    # Optional welcome / instruction message
-    if WELCOME_MESSAGE:
+    # Optional welcome / instruction message — hidden once chatting has begun,
+    # or immediately if the participant just passed through the passcode gate.
+    if WELCOME_MESSAGE and not _passcode_routing and not st.session_state["has_sent_message"]:
         st.markdown(
             f'<div class="welcome-banner">{WELCOME_MESSAGE}</div>',
             unsafe_allow_html=True,
         )
 
-    # Render conversation history
+    # Render conversation history.
+    # Every message stored in st.session_state["messages"] is displayed on
+    # each rerun, giving the participant a full view of the conversation.
+    # st.chat_message() renders a colored avatar and indented bubble whose
+    # style depends on the role: "user" gets a right-aligned bubble and
+    # "assistant" a left-aligned one, matching familiar chat conventions.
     for message in st.session_state["messages"]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -457,13 +911,10 @@ if not st.session_state["chat_ended"]:
             st.markdown(prompt)
 
         # Build the full message list for the API call.
-        # The system prompt is prepended at position 0 - participants never see it.
-        api_messages = (
-            [{"role": "system", "content": condition["system_prompt"]}]
-            + [
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state["messages"]
-            ]
+        # See build_api_messages() in the HELPER FUNCTIONS section for details.
+        api_messages = build_api_messages(
+            st.session_state["messages"],
+            condition["system_prompt"],
         )
 
         # Stream the model's response token-by-token for a natural feel
@@ -524,28 +975,73 @@ if not st.session_state["chat_ended"]:
 else:
     st.markdown(
         '<div class="transcript-banner">'
-        'Your chat has ended. Copy your transcript below and paste it back into the survey.'
+        'Your chat has ended. Your transcript is below. '
+        'Click the <strong>copy symbol in the top-right corner</strong> of the box, '
+        'then paste it back into the survey.'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    # Build the transcript object.
-    # - Condition name and model are intentionally omitted - participants see
-    #   this transcript and must not know which arm they were assigned to.
-    #   Treatment assignment is tracked in Qualtrics (via the session code),
-    #   not in the transcript itself.
-    # - "user" is relabelled "participant" for clarity in the messages array.
-    # - Timestamps are UTC ISO-8601 with explicit +00:00 offset, e.g.
-    #   "2026-03-06T14:22:01.123456+00:00" - unambiguous across time zones.
-    transcript = {
-        "messages": [
-            {
-                "role":      "participant" if m["role"] == "user" else "assistant",
-                "content":   m["content"],
-                "timestamp": m.get("timestamp", ""),
-            }
-            for m in st.session_state["messages"]
-        ],
-    }
+    # Build and render the transcript.
+    # See build_transcript() in the HELPER FUNCTIONS section for design notes
+    # on why condition name/model are excluded and how the role label works.
+    transcript = build_transcript(st.session_state["messages"])
 
     st.code(json.dumps(transcript, indent=2, ensure_ascii=False), language="json")
+
+
+# =============================================================================
+#  STUDY DATA HANDLING NOTES  (for researchers)
+# =============================================================================
+#
+#  These notes describe how to process the transcript data collected from
+#  participants.  They are for researcher reference only and have no effect
+#  on the running application.
+#
+#  PARSING THE TRANSCRIPT IN PYTHON
+#  ---------------------------------
+#  import json
+#  import pandas as pd
+#
+#  raw = qualtrics_response_column   # string value from Qualtrics export
+#  data = json.loads(raw)
+#  df = pd.DataFrame(data["messages"])  # columns: role, content, timestamp
+#
+#  Useful derived columns:
+#    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+#    df["turn"]      = range(len(df))
+#    df["words"]     = df["content"].str.split().str.len()
+#    df_user         = df[df["role"] == "participant"]
+#    df_asst         = df[df["role"] == "assistant"]
+#
+#  PARSING THE TRANSCRIPT IN R
+#  ----------------------------
+#  library(jsonlite)
+#
+#  raw  <- qualtrics_response_column   # character vector from survey export
+#  data <- fromJSON(raw)
+#  df   <- as.data.frame(data$messages)  # columns: role, content, timestamp
+#
+#  Useful transformations:
+#    df$timestamp <- as.POSIXct(df$timestamp, tz = "UTC", format = "%Y-%m-%dT%H:%M:%OS")
+#    df_user <- subset(df, role == "participant")
+#    df_asst <- subset(df, role == "assistant")
+#
+#  CONDITION ASSIGNMENT (EXPERIMENT MODE)
+#  ----------------------------------------
+#  Condition identity is NOT in the transcript.  Recover it from the survey
+#  branching logic:
+#    - In passcode routing: store the passcode shown to each participant in
+#      a Qualtrics embedded data field.  Map passcode → condition name in R/Python.
+#    - In random routing:   store the displayed arm label in an embedded data
+#      field in the Qualtrics Survey Flow randomizer branch.
+#
+#  DATA QUALITY CHECKS
+#  --------------------
+#  Recommended minimum checks before analysis:
+#    1. Verify json.loads() succeeds for every row (malformed pastes).
+#    2. Drop sessions with fewer than 2 messages (participant sent nothing).
+#    3. Check for unusually short response times (bot detection, inattention).
+#    4. Review assistant messages flagged with "Error" (API failures mid-session).
+#
+# =============================================================================

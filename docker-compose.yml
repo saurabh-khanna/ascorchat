@@ -1,0 +1,28 @@
+# =============================================================================
+#  surveychat – Docker Compose
+# =============================================================================
+#
+#  Quick start:
+#      docker compose up --build
+#
+#  Then open http://localhost:8501 in your browser.
+#
+#  The container reads OPENAI_API_KEY (and any other variables) from your
+#  local .env file via the `env_file` directive below.
+#  Never commit .env to git.
+#
+# =============================================================================
+
+services:
+  surveychat:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    # Restart automatically if the process crashes (e.g. after a server reboot).
+    restart: unless-stopped
+    # Optional: mount app.py as a bind mount during development so edits are
+    # reflected without rebuilding the image.  Comment out for production.
+    volumes:
+      - ./app.py:/app/app.py:ro
