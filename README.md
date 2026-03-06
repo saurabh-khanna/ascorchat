@@ -11,7 +11,7 @@ In both modes the participant chats, clicks **End chat**, and copies a text tran
 
 surveychat can be **embedded directly inside a Qualtrics survey** as an iFrame, so participants never leave the survey page. In survey mode, the chatbot loads directly on the page and participants start chatting straight away. In experiment mode, Qualtrics shows each participant their passcode first, then the chatbot loads below it on the same page.
 
-Demo of an experimental setup [here](https://surveychat.invisible.info) - use code ALPHA for neutral chatbot, and BETA for empathetic chatbot.
+> Demo of an experimental setup [here](https://surveychat.invisible.info) - use code ALPHA for neutral chatbot, and BETA for empathetic chatbot.
 
 Entering the chatbot (this example shows a passcode screen used in experiment mode):
 
