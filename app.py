@@ -252,8 +252,11 @@ if "participant_id" not in st.session_state:
     st.session_state["participant_id"] = str(uuid.uuid4())[:8].upper()
 
 # Randomly assign this participant to one of the N conditions.
-# Seeding the RNG with the participant_id makes the assignment deterministic:
-# the same ID always maps to the same condition, which aids reproducibility.
+# The RNG is seeded with the participant_id so the assignment is fully
+# determined by the random ID drawn at session start.  Note: because
+# st.session_state is reset on every page refresh (the WebSocket reconnects),
+# participant_id is re-drawn on reload and the condition can therefore change
+# between page loads.  This is by design - it keeps the implementation simple.
 # With N = 1 there is only one option, so no randomization occurs.
 if "condition_index" not in st.session_state:
     rng = random.Random(st.session_state["participant_id"])
@@ -432,16 +435,6 @@ else:
     # - "user" is relabelled "participant" for clarity in the messages array.
     # - Timestamps are UTC ISO-8601 with explicit +00:00 offset, e.g.
     #   "2026-03-06T14:22:01.123456+00:00" - unambiguous across time zones.
-    #
-    #  Parsing in Python:
-    #    data = json.loads(transcript_string)
-    #    model = data["model"]
-    #    df = pd.DataFrame(data["messages"])
-    #
-    #  Parsing in R:
-    #    data     <- fromJSON(transcript_string)
-    #    model    <- data$model
-    #    df       <- as.data.frame(data$messages)
     transcript = {
         "model": condition["model"],
         "messages": [

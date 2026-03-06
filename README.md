@@ -27,7 +27,7 @@ Built for researchers who want to study how chatbot style, tone, or framing affe
 
 | Feature | Detail |
 |---|---|
-| **Condition assignment** | Each participant is randomly assigned to one of N chatbot personalities when they first open the app. The same participant always gets the same condition - even if they refresh the page. |
+| **Condition assignment** | Each participant is randomly assigned to one of N chatbot personalities when they first open the app. Because session state resets on page refresh, a participant who reloads the page may be assigned a different condition. |
 | **Streaming responses** | LLM replies appear token-by-token for a natural chat feel |
 | **End Chat + transcript** | A participant-facing "End" button (two-click confirmation) reveals a copyable JSON transcript |
 | **Debug mode** | Toggle `DEBUG_MODE = True` while testing to confirm which condition is active |
@@ -220,22 +220,24 @@ The `name` field in each condition is only visible in debug mode - participants 
 
 The JSON transcript always records which model (and therefore which condition) generated the responses. In your Qualtrics export, the `model` value acts as a ready-made treatment indicator - no need to merge a separate randomization file.
 
-### Testing your conditions before launch
+---
 
-**Refreshing the page does not change the arm.** Condition assignment is seeded by a session ID that is stored server-side, so reloading the tab always returns the same participant to the same condition. This is intentional - it prevents accidental re-randomization if a participant navigates away and comes back.
+## Testing your conditions before launch
+
+**Refreshing the page can change the arm.** Streamlit session state is tied to the WebSocket connection, which resets on page reload. A new session means a new random assignment, so the condition is not guaranteed to be the same after a refresh. In a real study, participants are expected to stay on the page for the duration of the chat without refreshing.
 
 To see a different condition while testing:
 
 | What you want | How to do it |
 |---|---|
-| Try a fresh random assignment | Open a new private / incognito window (creates a new server session) |
-| Test a *specific* condition | Temporarily set `N_CONDITIONS = 1` and move the condition you want to test to the first slot in `CONDITIONS` |
+| Try a fresh random assignment | Refresh the page, or open a new tab |
+| Force a *specific* condition | Temporarily set `N_CONDITIONS = 1` and move the condition you want to test to the first slot in `CONDITIONS` |
 | Reset every active session | Restart the server: `Ctrl-C` then `streamlit run app.py` |
 | Confirm which arm you are in | Set `DEBUG_MODE = True` - the assigned condition name appears under the page title |
 
 A good pre-launch checklist:
 1. Set `DEBUG_MODE = True`
-2. Open one normal window and one incognito window - with `N_CONDITIONS = 2` you should eventually land in different arms
+2. Open the app in a normal window and in an incognito window - with `N_CONDITIONS = 2` you should eventually land in different arms across several opens
 3. Send a few messages in each and verify the chatbot behaves as expected
 4. Set `DEBUG_MODE = False` before sharing the link with participants
 
@@ -250,7 +252,7 @@ Participant opens link
 Session ID assigned (UUID, never shown to participant)
         │
         ▼
-Condition randomly assigned (seeded by session ID - same ID = same condition)
+Condition randomly assigned (seeded by random session ID)
         │
         ▼
 Chat interface appears
@@ -388,7 +390,7 @@ surveychat/
 → Check that `API_BASE_URL` is correct for your provider and that your key has the right permissions.
 
 **I always get Condition A / the same condition**  
-→ Expected. Condition is seeded by a server-side session ID, so refreshing the page does not re-randomize. To get a fresh assignment, open a new private/incognito window. To reset all active sessions at once, restart the server (`Ctrl-C` + `streamlit run app.py`). See [Testing your conditions before launch](#testing-your-conditions-before-launch) for a full checklist.
+→ With `N_CONDITIONS = 2` the probability of landing in Condition A is 50%, so it is normal to see the same one a few times in a row. Each page load is an independent randomization. Try opening several tabs in quick succession - you should see both conditions appear. To force a specific condition for a test, temporarily set `N_CONDITIONS = 1` and put the desired condition first in `CONDITIONS`.
 
 **Port 8501 is already in use**  
 → Run `pkill -f "streamlit run"` then try again, or use a different port:  
