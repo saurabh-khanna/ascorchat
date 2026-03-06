@@ -70,7 +70,7 @@
 #    (1) Use Qualtrics Survey Flow > Randomizer to split participants.
 #    (2) In each arm display the matching passcode and the app URL.
 #    (3) After the chat, add a Text Entry question for the transcript.
-#    (4) Export responses — treatment assignment is recovered from the
+#    (4) Export responses - treatment assignment is recovered from the
 #        passcode stored in the relevant Qualtrics branch variable.
 #
 #  DEPLOYMENT OPTIONS
@@ -105,8 +105,8 @@
 #  ---------------
 #  This file is intentionally self-contained.  The only section you need
 #  to edit for most studies is the RESEARCHER CONFIGURATION block below.
-#  Everything else — session management, participant routing, transcript
-#  export, and the chat UI — is handled for you automatically.
+#  Everything else - session management, participant routing, transcript
+#  export, and the chat UI - is handled for you automatically.
 #
 # =============================================================================
 
@@ -173,7 +173,7 @@ def validate_passcode_routing(conditions: list, n_conditions: int) -> None:
     active    = conditions[:n_conditions]
     passcoded = [c for c in active if "passcode" in c]
 
-    # Invariant 1: Partial configuration — some but not all conditions define
+    # Invariant 1: Partial configuration - some but not all conditions define
     # a passcode.  Either every arm needs a passcode (passcode routing) or
     # none do (random routing).  A mixed state is always a mistake.
     if 0 < len(passcoded) < n_conditions:
@@ -356,9 +356,9 @@ N_CONDITIONS = 2
 #
 #  "model"          The model identifier string for this condition.
 #                   Common options:
-#                     "gpt-oss-120b"  — large open-weights model (default proxy)
-#                     "gpt4o"         — GPT-4o via OpenAI or Azure
-#                     "gpt4o-mini"    — GPT-4o Mini, faster and cheaper
+#                     "gpt-oss-120b"  - large open-weights model (default proxy)
+#                     "gpt4o"         - GPT-4o via OpenAI or Azure
+#                     "gpt4o-mini"    - GPT-4o Mini, faster and cheaper
 #                   Different conditions can use different models if you want
 #                   to directly compare model-level effects.
 #
@@ -402,7 +402,7 @@ CONDITIONS = [
             "If the participant raises a topic that is subjective or contested, "
             "present relevant considerations from multiple perspectives without "
             "endorsing any particular view. "
-            "Keep your responses concise but complete — aim for two to four sentences "
+            "Keep your responses concise but complete - aim for two to four sentences "
             "unless the participant explicitly asks for more detail. "
             "Do not volunteer unsolicited advice or personal anecdotes."
         ),
@@ -419,12 +419,12 @@ CONDITIONS = [
             "heard and understood throughout the conversation. "
             "Begin each response by briefly acknowledging the participant's "
             "feelings or perspective before offering any information or asking "
-            "a follow-up question — for example, by reflecting back what they "
+            "a follow-up question - for example, by reflecting back what they "
             "said or validating their experience without being patronising. "
             "Use a conversational, supportive tone. Avoid clinical or bureaucratic "
             "language. When a participant shares something personal or emotionally "
             "significant, slow down and engage with that before moving on. "
-            "Keep your responses concise but warm — aim for two to four sentences "
+            "Keep your responses concise but warm - aim for two to four sentences "
             "unless the participant explicitly asks for more detail. "
             "Do not minimise, dismiss, or redirect away from anything the "
             "participant seems to find important."
@@ -447,13 +447,13 @@ CONDITIONS = [
     #         "probing question that invites them to examine that assumption, "
     #         "consider a counterexample, or articulate their reasoning more "
     #         "precisely. "
-    #         "Questions should be open-ended and genuinely exploratory — not "
+    #         "Questions should be open-ended and genuinely exploratory - not "
     #         "leading questions that hint at a preferred answer. "
     #         "If the participant asks you a direct question, turn it back to them "
     #         "with a question that helps them work toward their own answer. "
     #         "Keep the conversational pressure gentle but persistent: always end "
     #         "your turn with exactly one question, never more. "
-    #         "Do not summarise, conclude, or wrap up the conversation — your goal "
+    #         "Do not summarise, conclude, or wrap up the conversation - your goal "
     #         "is continued, deepening inquiry."
     #     ),
     #     "model": "gpt-oss-120b",
@@ -477,10 +477,10 @@ STUDY_TITLE = "surveychat"
 #     - Behavioural instruction:  "Please respond as you normally would.
 #       There are no right or wrong answers."
 #
-#   Set to "" to show no banner — useful if your Qualtrics page already
+#   Set to "" to show no banner - useful if your Qualtrics page already
 #   provides full instructions before the participant opens the chat link.
 #
-#   HTML is supported — use <strong>, <em>, <br> etc. for emphasis.
+#   HTML is supported - use <strong>, <em>, <br> etc. for emphasis.
 #
 #   Examples:
 #
@@ -554,14 +554,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Clean, minimal stylesheet — accent colors kept in sync with config.toml.
+# Clean, minimal stylesheet - accent colors kept in sync with config.toml.
 # Streamlit renders its own theme via CSS-in-JS and does not expose theme
 # values as CSS custom properties, so we hardcode the palette here.
 # If you change colors in .streamlit/config.toml, update these too:
 #
-#   PRIMARY   = #5C6C79   (primaryColor)             — borders, accents
-#   TEXT      = #1F2429   (textColor)                — body text
-#   BG_SEC    = #EFF1F3   (secondaryBackgroundColor)  — banner backgrounds
+#   PRIMARY   = #5C6C79   (primaryColor)             - borders, accents
+#   TEXT      = #1F2429   (textColor)                - body text
+#   BG_SEC    = #EFF1F3   (secondaryBackgroundColor)  - banner backgrounds
 st.markdown("""
 <style>
 /* ── Typography ────────────────────────────────────────────────────────────── */
@@ -680,7 +680,7 @@ if N_CONDITIONS > 1:
 #  persisting values across reruns within a single browser session.
 #
 #  Each `if … not in st.session_state` guard ensures values are initialised
-#  exactly once — on the participant's very first page load — and left
+#  exactly once - on the participant's very first page load - and left
 #  unchanged on every subsequent rerun.
 
 # ── Determine routing mode ────────────────────────────────────────────────────
@@ -693,7 +693,7 @@ if N_CONDITIONS > 1:
 #                      The passcode entry gate is shown before the chat.
 #                      The same passcode always resolves to the same condition
 #                      index, so a participant who refreshes the page and
-#                      re-enters their passcode lands on the same arm —
+#                      re-enters their passcode lands on the same arm -
 #                      without any server-side session storage.
 #
 #  Random routing   →  N > 1 BUT no conditions define a "passcode".
@@ -783,17 +783,17 @@ client = get_client(OPENAI_API_KEY, API_BASE_URL)
 #  on session-state flags set during earlier runs; this drives the multi-step
 #  participant flow:
 #
-#  Stage 1 — Passcode gate  (experiment mode with passcode routing only)
+#  Stage 1 - Passcode gate  (experiment mode with passcode routing only)
 #    • Displayed when st.session_state["passcode_accepted"] is False.
 #    • A form with a single text input collects the passcode.
 #    • Valid entry maps to a condition index, sets passcode_accepted=True,
 #      and triggers a full rerun so stage 1 is skipped on subsequent runs.
 #    • Invalid entry shows an inline error; the gate remains visible.
 #    • st.stop() at the end of stage 1 prevents any subsequent code from
-#      running until the gate is passed — the chat UI is never rendered
+#      running until the gate is passed - the chat UI is never rendered
 #      even partially for unauthenticated participants.
 #
-#  Stage 2 — Active chat
+#  Stage 2 - Active chat
 #    • Displayed when chat_ended is False.
 #    • The optional welcome banner is rendered first.
 #    • All messages in st.session_state["messages"] are replayed in order
@@ -806,7 +806,7 @@ client = get_client(OPENAI_API_KEY, API_BASE_URL)
 #      exchange.  A two-step confirmation (End → Confirm) prevents
 #      participants from accidentally discarding their conversation.
 #
-#  Stage 3 — Transcript panel
+#  Stage 3 - Transcript panel
 #    • Displayed when chat_ended is True.
 #    • The transcript banner and JSON code block are rendered.
 #    • Streamlit’s st.code() provides a built-in copy button in the
@@ -854,7 +854,7 @@ if not st.session_state["passcode_accepted"]:
             st.error("Code not recognised. Please check and try again.")
     st.stop()
 
-# Passcode accepted (or not required) — condition is now resolved.
+# Passcode accepted (or not required) - condition is now resolved.
 condition = CONDITIONS[st.session_state["condition_index"]]
 
 # ── End Chat button - appears after the first exchange ────────────────────────
@@ -875,7 +875,7 @@ if not st.session_state["chat_ended"] and st.session_state["has_sent_message"]:
 # ── Active chat ───────────────────────────────────────────────────────────────
 if not st.session_state["chat_ended"]:
 
-    # Optional welcome / instruction message — hidden once chatting has begun,
+    # Optional welcome / instruction message - hidden once chatting has begun,
     # or immediately if the participant just passed through the passcode gate.
     if WELCOME_MESSAGE and not _passcode_routing and not st.session_state["has_sent_message"]:
         st.markdown(
@@ -928,7 +928,7 @@ if not st.session_state["chat_ended"]:
                 response = st.write_stream(stream)
             except Exception as e:
                 response = None
-                # Remove the user message we just appended — leaving it in
+                # Remove the user message we just appended - leaving it in
                 # history without a paired assistant reply would send two
                 # consecutive user turns to the API on the next message.
                 st.session_state["messages"].pop()

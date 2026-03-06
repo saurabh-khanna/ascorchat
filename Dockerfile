@@ -23,7 +23,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install dependencies first so this layer is cached unless requirements.txt
-# changes — speeds up rebuilds during development.
+# changes - speeds up rebuilds during development.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -34,7 +34,7 @@ COPY . .
 # Streamlit listens on 8501 by default.
 EXPOSE 8501
 
-# Health check — Docker will mark the container unhealthy if Streamlit stops
+# Health check - Docker will mark the container unhealthy if Streamlit stops
 # responding, which is useful when running behind a load balancer.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8501/_stcore/health || exit 1
