@@ -167,9 +167,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Clean, minimal stylesheet — accent colors driven by the Streamlit theme
-# (config.toml primaryColor / textColor) via CSS custom properties so the
-# CSS never needs to be edited when the palette changes.
+# Clean, minimal stylesheet — accent colors kept in sync with config.toml.
+# Streamlit applies theme colors through its own CSS-in-JS system and does
+# not inject them as CSS custom properties, so we hardcode the same values
+# here.  If you change the palette in config.toml, update the variables
+# below to match.
+#
+#   PRIMARY   = #5C6C79   (primaryColor)
+#   TEXT      = #1F2429   (textColor)
+#   BG_SEC    = #EFF1F3   (secondaryBackgroundColor)
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
@@ -188,14 +194,14 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 /* App header */
 .app-header {
-    border-bottom: 2px solid var(--primary-color);
+    border-bottom: 2px solid #5C6C79;
     padding-bottom: 0.65rem;
     margin-bottom: 1.5rem;
 }
 .app-title {
     font-size: 1.35rem;
     font-weight: 600;
-    color: var(--text-color);
+    color: #1F2429;
     letter-spacing: -0.4px;
     margin: 0;
 }
@@ -207,25 +213,25 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 /* Welcome / instruction banner */
 .welcome-banner {
-    background: var(--secondary-background-color);
-    border-left: 4px solid var(--primary-color);
+    background: #EFF1F3;
+    border-left: 4px solid #5C6C79;
     border-radius: 0 6px 6px 0;
     padding: 0.75rem 1rem;
     font-size: 0.9rem;
-    color: var(--text-color);
+    color: #1F2429;
     margin-bottom: 1.25rem;
     line-height: 1.55;
 }
 
 /* Transcript panel */
 .transcript-banner {
-    background: var(--secondary-background-color);
+    background: #EFF1F3;
     border: 1px solid #e5e7eb;
-    border-left: 4px solid var(--primary-color);
+    border-left: 4px solid #5C6C79;
     border-radius: 0 8px 8px 0;
     padding: 0.8rem 1.1rem;
     font-size: 0.85rem;
-    color: var(--text-color);
+    color: #1F2429;
     margin-bottom: 1.25rem;
 }
 </style>
