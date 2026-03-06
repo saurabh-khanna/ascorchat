@@ -1,9 +1,8 @@
-# 💬 surveychat - A/B Testing Chatbot Platform for Research
+# 💬 surveychat - Chatbot Platform for Research
 
-surveychat is a minimal, self-contained web application for running chatbot experiments.  
-Each participant is randomly assigned to one of N chatbot *conditions* (different system prompts / models). At the end of the conversation, the participant receives a JSON transcript to copy and paste back into your survey (e.g. Qualtrics).
+surveychat is a minimal, self-contained web application for running chatbot surveys or experiments. Each participant is randomly assigned to one of N chatbot *conditions* (different system prompts / models). N = 1 enables 'survey' mode as there is no randomization. At the end of the conversation, the participant receives a JSON transcript to copy and paste back into your survey (e.g. Qualtrics).
 
-Built for communication researchers who want to study how chatbot style, tone, or framing affects user responses - with zero backend infrastructure.
+Built for researchers who want to study how chatbot style, tone, or framing affects user responses - with zero backend infrastructure. Can be deployed locally or online.
 
 ---
 
@@ -11,11 +10,11 @@ Built for communication researchers who want to study how chatbot style, tone, o
 
 | Feature | Detail |
 |---|---|
-| **Condition assignment** | Participants are randomly routed to one of N chatbot personalities on first load, deterministically seeded by their session ID |
+| **Condition assignment** | Each participant is randomly assigned to one of N chatbot personalities when they first open the app. The same participant always gets the same condition. |
 | **Streaming responses** | LLM replies appear token-by-token for a natural chat feel |
 | **End Chat + transcript** | A participant-facing "End" button (two-click confirmation) reveals a copyable JSON transcript |
 | **Debug mode** | Toggle `DEBUG_MODE = True` while testing to confirm which condition is active |
-| **No database** | All state lives in the browser session; nothing is written to disk |
+| **No database** | Nothing is written to disk or sent to a database - all state is held in the server session |
 
 ---
 
@@ -37,11 +36,11 @@ If Python is not installed, download it from [python.org](https://www.python.org
 
 surveychat can work with any API endpoint that follows the OpenAI SDK format:
 
-| Provider | `API_BASE_URL` | Key env var |
-|---|---|---|
-| Azure LiteLLM proxy (ASCoR default) | `https://ai-research-proxy.azurewebsites.net` | `OPENAI_API_KEY` |
-| OpenAI directly | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
-| OpenRouter | `https://openrouter.ai/api/v1` | `OPENAI_API_KEY` |
+| Provider | `API_BASE_URL` to use |
+|---|---|
+| Azure LiteLLM proxy (ASCoR default) | `https://ai-research-proxy.azurewebsites.net` |
+| OpenAI directly | `https://api.openai.com/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
 
 > If you are at ASCoR (University of Amsterdam), request an API key from your lab coordinator.
 
@@ -52,9 +51,11 @@ surveychat can work with any API endpoint that follows the OpenAI SDK format:
 ### Step 1 - Clone the repository
 
 ```bash
-git clone https://github.com/your-org/surveychat.git
+git clone https://github.com/YOUR_USERNAME/surveychat.git
 cd surveychat
 ```
+
+Replace `YOUR_USERNAME` with your GitHub username (or organisation name).
 
 ### Step 2 - Create a virtual environment and install dependencies
 
@@ -261,8 +262,6 @@ For data collection you need the app accessible on the web, not just `localhost`
    ```
 4. Deploy - Streamlit will give you a public URL to share with participants
 
-> **Note:** Streamlit Community Cloud runs a single process, so condition assignment is still per-session but all sessions share the same Python process. This is fine for most studies.
-
 ### Option B - Any cloud VM (DigitalOcean, Hetzner, AWS EC2, etc.)
 
 ```bash
@@ -270,7 +269,8 @@ For data collection you need the app accessible on the web, not just `localhost`
 git clone https://github.com/your-org/surveychat.git
 cd surveychat
 pip install -r requirements.txt
-cp .env.example .env && nano .env   # add your key
+cp .env.example .env
+# Open .env in any text editor and add your API key
 streamlit run app.py --server.port 80 --server.headless true
 ```
 
