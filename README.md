@@ -1,3 +1,3 @@
 # 🤖 ascorchat
 
-[ascorchat]() is a chatbot being developed for communication science research at the Amsterdam School of Communication Research (ASCoR), University of Amsterdam.
+[ascorchat]() is a chatbot being developed for communication science research at the Amsterdam School of Communication Research (ASCoR), University of Amsterdam. Live [here](https://ascorchat.appliku.app/).
