@@ -78,7 +78,7 @@ N_CONDITIONS = 2
 #
 #  Keys per condition
 #  ------------------
-#  "name"           Short internal label (appears in sidebar and transcripts).
+#  "name"           Short internal label (shown in the debug subtitle and transcript).
 #  "system_prompt"  The hidden instruction sent to the model before the
 #                   conversation starts.  Participants never see this text, but
 #                   it shapes the entire personality and behavior of the chatbot.
@@ -398,15 +398,21 @@ if not st.session_state["chat_ended"]:
 # =============================================================================
 #
 #  Shown after the participant clicks "End".
-#  The transcript is JSON - the most convenient format for later analysis:
+#  The transcript is a JSON object with two keys:
+#    - "model":    the model used in this session (condition-level treatment)
+#    - "messages": a list of turns, each with role/content/timestamp
 #
-#    Python / pandas:
-#      import pandas as pd, json
-#      df = pd.DataFrame(json.loads(transcript_string))
+#  Parsing in Python:
+#      import json, pandas as pd
+#      data  = json.loads(transcript_string)
+#      model = data["model"]
+#      df    = pd.DataFrame(data["messages"])
 #
-#    R / tidyverse:
-#      library(tidyverse, jsonlite)
-#      df <- fromJSON(transcript_string)
+#  Parsing in R:
+#      library(jsonlite)
+#      data  <- fromJSON(transcript_string)
+#      model <- data$model
+#      df    <- as.data.frame(data$messages)
 #
 #  Streamlit's st.code() block has a built-in copy button in the top-right
 #  corner - one click copies everything to the clipboard.

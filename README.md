@@ -315,7 +315,7 @@ surveychat/
 → Check that `API_BASE_URL` is correct for your provider and that your key has the right permissions.
 
 **I always get Condition A / the same condition**  
-→ This is expected behaviour — condition is seeded by session ID. Clear your browser cookies or open a private window to simulate a new participant.
+→ This is expected behaviour — condition is seeded by session ID. Open a new private/incognito window to get a fresh session. Streamlit session state is server-side, not stored in browser cookies.
 
 **Port 8501 is already in use**  
 → Run `pkill -f "streamlit run"` then try again, or use a different port:  
@@ -325,4 +325,4 @@ surveychat/
 
 ## License
 
-[MIT](LICENSE) — free to use, fork, and adapt for academic research.
+[AGPL-3.0](LICENSE) — free to use and fork for academic research. Any modifications must be released under the same license.
