@@ -1,7 +1,11 @@
-streamlit run --browser.serverAddress $SERVER_NAME --server.port $PORT app.py
+#!/usr/bin/env bash
+set -euo pipefail
 
-# #!/usr/bin/env bash
-# # Convenience script - runs surveychat locally.
-# # Usage: sh run.sh
+# Convenience launcher for local/dev container runs.
+PORT="${PORT:-8501}"
+SERVER_NAME="${SERVER_NAME:-0.0.0.0}"
 
-# streamlit run app.py
+exec streamlit run app.py \
+  --server.address "${SERVER_NAME}" \
+  --server.port "${PORT}" \
+  --server.headless true

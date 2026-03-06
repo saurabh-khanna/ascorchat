@@ -37,7 +37,7 @@ EXPOSE 8501
 # Health check - Docker will mark the container unhealthy if Streamlit stops
 # responding, which is useful when running behind a load balancer.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=5).read()" || exit 1
 
 # Run the app.
 # --server.headless=true   suppresses the browser-open prompt.
