@@ -167,7 +167,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 /* Page layout */
 .block-container { max-width: 740px; padding-top: 2.25rem; padding-bottom: 1rem; }
 
-/* Transcript code block — wrap long lines on narrow screens */
+/* Transcript code block - wrap long lines on narrow screens */
 .stCode pre { white-space: pre-wrap; word-break: break-word; }
 
 /* App header */
@@ -313,7 +313,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── End Chat button — appears after the first exchange ────────────────────────
+# ── End Chat button - appears after the first exchange ────────────────────────
 # Placed below the header so it does not compete with the title layout.
 if not st.session_state["chat_ended"] and st.session_state["has_sent_message"]:
     _, end_col = st.columns([5, 1])
@@ -323,7 +323,7 @@ if not st.session_state["chat_ended"] and st.session_state["has_sent_message"]:
                 st.session_state["confirm_end"] = True
                 st.rerun()
         else:
-            # Second click required to confirm — prevents accidental endings
+            # Second click required to confirm - prevents accidental endings
             if st.button("✓ Confirm", use_container_width=True, type="primary"):
                 st.session_state["chat_ended"] = True
                 st.rerun()
@@ -431,7 +431,7 @@ else:
     #   In a multi-arm study this is the primary treatment identifier.
     # - "user" is relabelled "participant" for clarity in the messages array.
     # - Timestamps are UTC ISO-8601 with explicit +00:00 offset, e.g.
-    #   "2026-03-06T14:22:01.123456+00:00" — unambiguous across time zones.
+    #   "2026-03-06T14:22:01.123456+00:00" - unambiguous across time zones.
     #
     #  Parsing in Python:
     #    data = json.loads(transcript_string)

@@ -1,9 +1,9 @@
-# 💬 surveychat — A/B Testing Chatbot Platform for Research
+# 💬 surveychat - A/B Testing Chatbot Platform for Research
 
 surveychat is a minimal, self-contained web application for running chatbot experiments.  
 Each participant is randomly assigned to one of N chatbot *conditions* (different system prompts / models). At the end of the conversation, the participant receives a JSON transcript to copy and paste back into your survey (e.g. Qualtrics).
 
-Built for communication researchers who want to study how chatbot style, tone, or framing affects user responses — with zero backend infrastructure.
+Built for communication researchers who want to study how chatbot style, tone, or framing affects user responses - with zero backend infrastructure.
 
 ---
 
@@ -49,14 +49,14 @@ surveychat can work with any API endpoint that follows the OpenAI SDK format:
 
 ## Quick start
 
-### Step 1 — Clone the repository
+### Step 1 - Clone the repository
 
 ```bash
 git clone https://github.com/your-org/surveychat.git
 cd surveychat
 ```
 
-### Step 2 — Create a virtual environment and install dependencies
+### Step 2 - Create a virtual environment and install dependencies
 
 **Using pip (recommended for most users):**
 
@@ -74,7 +74,7 @@ conda activate surveychat
 pip install -r requirements.txt
 ```
 
-### Step 3 — Add your API key
+### Step 3 - Add your API key
 
 Copy the example environment file and fill in your key:
 
@@ -88,9 +88,9 @@ Open `.env` in any text editor and replace the placeholder:
 OPENAI_API_KEY=your-actual-api-key-here
 ```
 
-> `.env` is listed in `.gitignore` — your key will never accidentally be committed to GitHub.
+> `.env` is listed in `.gitignore` - your key will never accidentally be committed to GitHub.
 
-### Step 4 — Run the app
+### Step 4 - Run the app
 
 ```bash
 streamlit run app.py
@@ -139,7 +139,7 @@ CONDITIONS = [
 ```
 
 **Tips for writing system prompts:**
-- Be explicit and specific — vague prompts produce inconsistent behavior
+- Be explicit and specific - vague prompts produce inconsistent behavior
 - Pilot test each condition yourself before launching (`DEBUG_MODE = True` shows which condition you are in)
 - Make the manipulation strong enough to detect in your data
 
@@ -160,8 +160,8 @@ STUDY_TITLE = "surveychat"   # shown in browser tab and as the page heading
 ### Debug mode
 
 ```python
-DEBUG_MODE = True    # shows assigned condition under the title — use while testing
-DEBUG_MODE = False   # hides condition label — use for real data collection
+DEBUG_MODE = True    # shows assigned condition under the title - use while testing
+DEBUG_MODE = False   # hides condition label - use for real data collection
 ```
 
 ---
@@ -175,7 +175,7 @@ Participant opens link
 Session ID assigned (UUID, never shown to participant)
         │
         ▼
-Condition randomly assigned (seeded by session ID — same ID = same condition)
+Condition randomly assigned (seeded by session ID - same ID = same condition)
         │
         ▼
 Chat interface appears
@@ -216,8 +216,8 @@ Participants copy a JSON block at the end of the chat and paste it into a "Text 
 }
 ```
 
-- `model` is the condition-level treatment identifier — the model that generated all assistant turns in this session
-- `role` is `"participant"` or `"assistant"` — never `"system"`
+- `model` is the condition-level treatment identifier - the model that generated all assistant turns in this session
+- `role` is `"participant"` or `"assistant"` - never `"system"`
 - `timestamp` is always UTC with an explicit `+00:00` offset, safe across time zones
 
 ### Analysing transcripts in Python
@@ -251,19 +251,19 @@ glimpse(df)
 
 For data collection you need the app accessible on the web, not just `localhost`. Two straightforward options:
 
-### Option A — Streamlit Community Cloud (free, recommended for pilots)
+### Option A - Streamlit Community Cloud (free, recommended for pilots)
 
-1. Push your repo to GitHub (make sure `.env` is in `.gitignore` — it already is)
+1. Push your repo to GitHub (make sure `.env` is in `.gitignore` - it already is)
 2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your repo
 3. Under **Advanced settings → Secrets**, add:
    ```toml
    OPENAI_API_KEY = "your-actual-api-key-here"
    ```
-4. Deploy — Streamlit will give you a public URL to share with participants
+4. Deploy - Streamlit will give you a public URL to share with participants
 
 > **Note:** Streamlit Community Cloud runs a single process, so condition assignment is still per-session but all sessions share the same Python process. This is fine for most studies.
 
-### Option B — Any cloud VM (DigitalOcean, Hetzner, AWS EC2, etc.)
+### Option B - Any cloud VM (DigitalOcean, Hetzner, AWS EC2, etc.)
 
 ```bash
 # On the server
@@ -294,7 +294,7 @@ surveychat/
 ├── app.py              ← entire application (edit the top section for your study)
 ├── requirements.txt    ← Python dependencies
 ├── .env.example        ← copy to .env and add your API key
-├── .env                ← your actual key (gitignored — never committed)
+├── .env                ← your actual key (gitignored - never committed)
 ├── run.sh              ← convenience script: sh run.sh
 ├── .streamlit/         ← Streamlit configuration (theme etc.)
 ├── LICENSE
@@ -315,7 +315,7 @@ surveychat/
 → Check that `API_BASE_URL` is correct for your provider and that your key has the right permissions.
 
 **I always get Condition A / the same condition**  
-→ This is expected behaviour — condition is seeded by session ID. Open a new private/incognito window to get a fresh session. Streamlit session state is server-side, not stored in browser cookies.
+→ This is expected behaviour - condition is seeded by session ID. Open a new private/incognito window to get a fresh session. Streamlit session state is server-side, not stored in browser cookies.
 
 **Port 8501 is already in use**  
 → Run `pkill -f "streamlit run"` then try again, or use a different port:  
@@ -325,4 +325,4 @@ surveychat/
 
 ## License
 
-[AGPL-3.0](LICENSE) — free to use and fork for academic research. Any modifications must be released under the same license.
+[AGPL-3.0](LICENSE) - free to use and fork for academic research. Any modifications must be released under the same license.
