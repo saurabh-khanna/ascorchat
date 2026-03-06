@@ -27,7 +27,7 @@ Built for researchers who want to study how chatbot style, tone, or framing affe
 
 | Feature | Detail |
 |---|---|
-| **Condition assignment** | Each participant is randomly assigned to one of N chatbot personalities when they first open the app. Because session state resets on page refresh, a participant who reloads the page may be assigned a different condition. |
+| **Condition assignment** | When N > 1, participants enter a short session code (given to them by Qualtrics) which maps to their assigned condition. The same code always routes to the same arm, so refreshes are safe. N = 1 skips the code screen entirely. |
 | **Streaming responses** | LLM replies appear token-by-token for a natural chat feel |
 | **End Chat + transcript** | A participant-facing "End" button (two-click confirmation) reveals a copyable JSON transcript |
 | **Debug mode** | Toggle `DEBUG_MODE = True` while testing to confirm which condition is active |
@@ -125,21 +125,23 @@ N_CONDITIONS = 2   # 1 = no randomization, 2 = A/B, 3+ = multi-arm
 
 ### Defining chatbot conditions
 
-Each condition is a dictionary with three keys:
+Each condition is a dictionary with four keys:
 
 ```python
 CONDITIONS = [
     {
-        "name": "Condition A - Neutral",     # internal label only, not shown to participants
+        "name":          "Condition A - Neutral",  # internal label, never shown to participants
+        "key":           "ALPHA",                  # session code → routes here (N > 1 only)
         "system_prompt": (
             "You are a helpful and neutral research assistant. "
             "Answer all questions clearly and concisely without expressing "
             "personal opinions or emotional reactions."
         ),
-        "model": "gpt-oss-120b",             # model name for this condition
+        "model": "gpt-oss-120b",
     },
     {
-        "name": "Condition B - Empathetic",
+        "name":          "Condition B - Empathetic",
+        "key":           "BETA",
         "system_prompt": (
             "You are a warm and empathetic research assistant. "
             "Acknowledge the user's perspective and respond with care, "
@@ -155,6 +157,11 @@ CONDITIONS = [
 - Pilot test each condition yourself before launching (`DEBUG_MODE = True` shows which condition you are in)
 - Make the manipulation strong enough to detect in your data
 
+**Tips for choosing session codes:**
+- Use short, neutral words that give no hint of the condition content (`ALPHA`/`BETA`, colours, numbers)
+- Codes are case-insensitive - participants can type in any case
+- Qualtrics should display the code prominently before the chat link, e.g. *"Your session code is: ALPHA"*
+
 ### API endpoint
 
 ```python
@@ -168,6 +175,14 @@ Change this if you switch providers. Available model names depend on your endpoi
 ```python
 STUDY_TITLE = "surveychat"   # shown in browser tab and as the page heading
 ```
+
+### Session code prompt
+
+```python
+KEY_ENTRY_PROMPT = "Please enter the session code you received in the survey to begin."
+```
+
+The instruction shown above the code text box on the entry screen. Ignored when `N_CONDITIONS = 1`.
 
 ### Welcome message
 
@@ -206,15 +221,21 @@ Set `N_CONDITIONS = 1` when you just want all participants to talk to the same c
 
 ### Mixing chatbot arms with Qualtrics arms
 
-surveychat handles randomization *within* the chat portion of your study. If your broader Qualtrics survey already randomizes participants into arms (e.g. different vignettes, different question frames), you can run a **separate surveychat deployment per arm**, each with `N_CONDITIONS = 1` and a condition-specific system prompt.
+The recommended approach when Qualtrics already assigns participants to arms: use **session code routing**. Each condition has a short code; Qualtrics shows each participant the code for their arm before they open the chat. surveychat reads the code and routes deterministically.
 
 Workflow:
-1. Qualtrics assigns the participant to Arm A or Arm B via its own randomization logic
-2. The Qualtrics branch for Arm A links to a surveychat instance configured for that arm
-3. The Qualtrics branch for Arm B links to a different surveychat instance configured for that arm
-4. Each instance uses `N_CONDITIONS = 1` - no further randomization inside the chat
+1. Qualtrics randomizes participants between Arm A and Arm B as usual
+2. The Arm A branch displays: *"Your session code is: ALPHA"*
+3. The Arm B branch displays: *"Your session code is: BETA"*
+4. The participant opens surveychat, enters their code, and is routed to the correct condition
 
-This keeps condition assignment fully in Qualtrics (where you already track it) while still benefiting from surveychat's streaming interface and transcript export.
+Benefits over the old approach (separate N=1 deployments per arm):
+- Single surveychat deployment to maintain
+- Condition assignment stays entirely in Qualtrics — surveychat just follows instructions
+- Refresh-safe: re-entering the same code always returns the same arm
+- No risk of participants ending up in a different arm if they accidentally refresh
+
+If you prefer separate deployments, that still works — set `N_CONDITIONS = 1` per instance and omit the `"key"` field.
 
 ### Varying the model, not just the prompt
 
@@ -235,28 +256,32 @@ The `name` field in each condition is only visible in debug mode - participants 
 
 ### Using the transcript `model` field as your treatment variable
 
-The JSON transcript always records which model (and therefore which condition) generated the responses. In your Qualtrics export, the `model` value acts as a ready-made treatment indicator - no need to merge a separate randomization file.
+The JSON transcript always records which model generated the responses. In your Qualtrics export, the `model` value acts as a ready-made treatment indicator - no need to merge a separate randomization file. If all your conditions share the same model, set distinct model names per condition (even if pointing to the same underlying API endpoint) so they remain distinguishable in the data.
 
 ---
 
 ## Testing your conditions before launch
 
-**Refreshing the page can change the arm.** Streamlit session state is tied to the WebSocket connection, which resets on page reload. A new session means a new random assignment, so the condition is not guaranteed to be the same after a refresh. In a real study, participants are expected to stay on the page for the duration of the chat without refreshing.
+**How routing works:**
+- **N = 1**: Condition 0 assigned automatically — no code screen, no randomization.
+- **N > 1 with session codes** (recommended): Participant enters a code → routed to matching arm. Same code always returns same arm; page refreshes are safe.
+- **N > 1 without session codes** (fallback): Condition drawn randomly at session start. Refreshing may change the arm.
 
-To see a different condition while testing:
+To test each arm:
 
 | What you want | How to do it |
 |---|---|
-| Try a fresh random assignment | Refresh the page, or open a new tab |
-| Force a *specific* condition | Temporarily set `N_CONDITIONS = 1` and move the condition you want to test to the first slot in `CONDITIONS` |
-| Reset every active session | Restart the server: `Ctrl-C` then `streamlit run app.py` |
-| Confirm which arm you are in | Set `DEBUG_MODE = True` - the assigned condition name appears under the page title |
+| Test a specific arm | Enter that arm's session code on the code screen |
+| Confirm which arm you are in | Set `DEBUG_MODE = True` — the condition name appears under the title |
+| Verify refresh stability | Refresh the page and re-enter the same code — you should land in the same condition |
+| Test each arm quickly | Open a separate tab per arm and enter a different code in each |
 
 A good pre-launch checklist:
 1. Set `DEBUG_MODE = True`
-2. Open the app in a normal window and in an incognito window - with `N_CONDITIONS = 2` you should eventually land in different arms across several opens
-3. Send a few messages in each and verify the chatbot behaves as expected
-4. Set `DEBUG_MODE = False` before sharing the link with participants
+2. Enter each session code in a separate tab and verify the chatbot behaves correctly for that condition
+3. Confirm the code screen shows your `KEY_ENTRY_PROMPT` text
+4. Try entering a wrong code and confirm the error message appears
+5. Set `DEBUG_MODE = False` before sharing the link with participants
 
 ---
 
@@ -266,10 +291,11 @@ A good pre-launch checklist:
 Participant opens link
         │
         ▼
-Session ID assigned (UUID, never shown to participant)
-        │
-        ▼
-Condition randomly assigned (seeded by random session ID)
+[N > 1 with session codes]            [N = 1]
+Code entry screen                      │
+        │ (valid code entered)          │
+        ▼                              │
+Condition assigned by code ◄───────────┘
         │
         ▼
 Chat interface appears
@@ -314,16 +340,17 @@ Participants copy a JSON block at the end of the chat and paste it into a "Text 
 - `role` is `"participant"` or `"assistant"` - never `"system"`
 - `timestamp` is always UTC with an explicit `+00:00` offset, safe across time zones
 
+> **Note:** The condition `name`, model name, and other condition-level fields are intentionally excluded from the transcript. Participants copy and read this JSON, so including them could reveal the treatment assignment and introduce demand characteristics. Treatment assignment is tracked in Qualtrics via the session code.
+
 ### Analysing transcripts in Python
 
 ```python
 import pandas as pd, json
 
-raw   = 'paste the JSON string from Qualtrics export here'
-data  = json.loads(raw)
-model = data["model"]                  # treatment variable
-df    = pd.DataFrame(data["messages"]) # one row per turn
-print(model, df)
+raw  = 'paste the JSON string from Qualtrics export here'
+data = json.loads(raw)
+df   = pd.DataFrame(data["messages"])  # one row per turn
+print(df)
 ```
 
 ### Analysing transcripts in R
@@ -332,10 +359,9 @@ print(model, df)
 library(jsonlite)
 library(tidyverse)
 
-raw   <- 'paste the JSON string from Qualtrics export here'
-data  <- fromJSON(raw)
-model <- data$model                    # treatment variable
-df    <- as.data.frame(data$messages)  # one row per turn
+raw  <- 'paste the JSON string from Qualtrics export here'
+data <- fromJSON(raw)
+df   <- as.data.frame(data$messages)  # one row per turn
 glimpse(df)
 ```
 
@@ -397,6 +423,12 @@ surveychat/
 
 ## Troubleshooting
 
+**"Code not recognised" on the session code screen**  
+→ Check that the code is listed in a `"key"` field inside `CONDITIONS` in `app.py` (comparison is case-insensitive). Common causes: a typo in the config, or the participant miscopied the code from Qualtrics.
+
+**The chatbot changes condition on page refresh**  
+→ This happens when running without session codes (`"key"` not defined on conditions). Add a `"key"` to each condition and use the code-entry workflow — the same code always routes to the same arm. See [Testing your conditions before launch](#testing-your-conditions-before-launch).
+
 **"OPENAI_API_KEY not found or empty"**  
 → Make sure `.env` exists in the project root and contains `OPENAI_API_KEY=...` (no spaces around `=`).
 
@@ -407,7 +439,7 @@ surveychat/
 → Check that `API_BASE_URL` is correct for your provider and that your key has the right permissions.
 
 **I always get Condition A / the same condition**  
-→ With `N_CONDITIONS = 2` the probability of landing in Condition A is 50%, so it is normal to see the same one a few times in a row. Each page load is an independent randomization. Try opening several tabs in quick succession - you should see both conditions appear. To force a specific condition for a test, temporarily set `N_CONDITIONS = 1` and put the desired condition first in `CONDITIONS`.
+→ With session code routing this is expected — the code deterministically selects the arm. To test a different arm, enter a different code. With random routing (no codes), condition A has a 50% probability; open multiple tabs to see both arms.
 
 **Port 8501 is already in use**  
 → Run `pkill -f "streamlit run"` then try again, or use a different port:  

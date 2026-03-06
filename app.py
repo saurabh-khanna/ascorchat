@@ -30,7 +30,6 @@
 import json
 import os
 import random
-import uuid
 from datetime import datetime, timezone
 
 # ── Third-party ───────────────────────────────────────────────────────────────
@@ -78,7 +77,12 @@ N_CONDITIONS = 2
 #
 #  Keys per condition
 #  ------------------
-#  "name"           Short internal label (shown in the debug subtitle and transcript).
+#  "name"           Short internal label (shown in the debug subtitle).
+#  "key"            Session code that routes participants to this condition.
+#                   Required when N > 1; assign one unique code per condition
+#                   and give each code to Qualtrics so it can display the right
+#                   one to each participant before the chat starts.
+#                   Case-insensitive.  Omit (or leave out) when N = 1.
 #  "system_prompt"  The hidden instruction sent to the model before the
 #                   conversation starts.  Participants never see this text, but
 #                   it shapes the entire personality and behavior of the chatbot.
@@ -87,12 +91,15 @@ N_CONDITIONS = 2
 #
 #  Tip: Write system prompts that clearly differ between conditions so your
 #  experimental manipulation is strong and easy to detect in your data.
+#  Tip: Use short, neutral codes ("ALPHA"/"BETA", colours, animals, etc.)
+#  that give no hint of the condition's content.
 
 CONDITIONS = [
 
     # ── Condition A ───────────────────────────────────────────────────────────
     {
-        "name": "Condition A - Neutral",
+        "name":          "Condition A - Neutral",
+        "key":           "ALPHA",      # session code → routes to this condition
         "system_prompt": (
             "You are a helpful and neutral research assistant. "
             "Answer all questions clearly and concisely without expressing "
@@ -103,7 +110,8 @@ CONDITIONS = [
 
     # ── Condition B ───────────────────────────────────────────────────────────
     {
-        "name": "Condition B - Empathetic",
+        "name":          "Condition B - Empathetic",
+        "key":           "BETA",       # session code → routes to this condition
         "system_prompt": (
             "You are a warm and empathetic research assistant. "
             "Acknowledge the user's perspective and respond with care, "
@@ -114,7 +122,8 @@ CONDITIONS = [
 
     # ── Add more conditions below by copying the block above ─────────────────
     # {
-    #     "name": "Condition C - Directive",
+    #     "name":          "Condition C - Directive",
+    #     "key":           "GAMMA",
     #     "system_prompt": (
     #         "You are a direct and assertive research assistant. "
     #         "Give clear, action-oriented guidance without hedging."
@@ -141,6 +150,14 @@ STUDY_TITLE = "surveychat"
 #           "When you are done, click the End button to receive your transcript."
 #       )
 WELCOME_MESSAGE = ""
+
+# ── Prompt shown on the session-code entry screen (keyword routing only) ─────
+#
+#   Displayed above the code text box when N > 1 and all conditions define a
+#   "key".  Ignored when N = 1.
+KEY_ENTRY_PROMPT = (
+    "Please enter the session code you received in the survey to begin."
+)
 
 # ── Debug mode ────────────────────────────────────────────────────────────────
 #
@@ -271,6 +288,32 @@ if len(CONDITIONS) < N_CONDITIONS:
     )
     st.stop()
 
+# Validate keyword-routing configuration when N > 1.
+if N_CONDITIONS > 1:
+    _active = CONDITIONS[:N_CONDITIONS]
+    _keyed  = [c for c in _active if "key" in c]
+    if 0 < len(_keyed) < N_CONDITIONS:
+        st.error(
+            f"Keyword routing is partially configured: **{len(_keyed)}** of "
+            f"**{N_CONDITIONS}** active conditions have a `\"key\"` field. "
+            "Either add a `\"key\"` to every condition or remove them all."
+        )
+        st.stop()
+    if len(_keyed) == N_CONDITIONS:
+        if any(not c["key"].strip() for c in _active):
+            st.error(
+                "One or more condition `\"key\"` values are empty strings. "
+                "Every session code must contain at least one character."
+            )
+            st.stop()
+        _keys = [c["key"].strip().lower() for c in _active]
+        if len(_keys) != len(set(_keys)):
+            st.error(
+                "Two or more conditions share the same `\"key\"` value. "
+                "Every condition must have a unique session code."
+            )
+            st.stop()
+
 
 # =============================================================================
 #  SESSION STATE INITIALIZATION
@@ -281,25 +324,27 @@ if len(CONDITIONS) < N_CONDITIONS:
 #  Each `if … not in st.session_state` guard ensures values are set only
 #  once per browser session - i.e. once per participant visit.
 
-# Assign a short, readable unique participant ID on first load.
-if "participant_id" not in st.session_state:
-    st.session_state["participant_id"] = str(uuid.uuid4())[:8].upper()
+# Routing mode:
+#   keyword routing  →  N > 1 and every active condition defines a "key" field.
+#                       Participants enter a session code; same code = same arm,
+#                       so the condition is stable across page refreshes.
+#   random routing   →  N = 1 (always condition 0) or no keys defined.
+#                       Condition is drawn at random on each new session.
+_key_routing = N_CONDITIONS > 1 and all(
+    "key" in CONDITIONS[i] for i in range(N_CONDITIONS)
+)
 
-# Randomly assign this participant to one of the N conditions.
-# The RNG is seeded with the participant_id so the assignment is fully
-# determined by the random ID drawn at session start.  Note: because
-# st.session_state is reset on every page refresh (the WebSocket reconnects),
-# participant_id is re-drawn on reload and the condition can therefore change
-# between page loads.  This is by design - it keeps the implementation simple.
-# With N = 1 there is only one option, so no randomization occurs.
-if "condition_index" not in st.session_state:
-    rng = random.Random(st.session_state["participant_id"])
+# For random/single-condition routing, assign now.
+# For keyword routing, defer until the participant enters their code.
+if not _key_routing and "condition_index" not in st.session_state:
     st.session_state["condition_index"] = (
-        0 if N_CONDITIONS == 1 else rng.randint(0, N_CONDITIONS - 1)
+        0 if N_CONDITIONS == 1 else random.randint(0, N_CONDITIONS - 1)
     )
 
-# Retrieve the full condition dictionary for the assigned condition.
-condition = CONDITIONS[st.session_state["condition_index"]]
+# Tracks whether the session-code gate has been passed.
+# Starts True when no gate is needed (random/single routing).
+if "key_accepted" not in st.session_state:
+    st.session_state["key_accepted"] = not _key_routing
 
 # Track whether the participant has ended the chat session.
 # Once True, the chat input is hidden and the transcript panel is shown.
@@ -335,20 +380,63 @@ client = get_client(OPENAI_API_KEY, API_BASE_URL)
 #  MAIN CHAT INTERFACE
 # =============================================================================
 
-# ── Header: title and optional debug subtitle, rendered as one HTML fragment ──
-# Note: each st.markdown() call is an independent HTML document fragment in
-# Streamlit, so opening/closing <div> tags must be in the same call.
-subtitle_html = (
-    f'<div class="app-subtitle">Testing: {condition["name"]}</div>'
-    if DEBUG_MODE else ""
-)
+# ── Header ───────────────────────────────────────────────────────────────────────
+if DEBUG_MODE:
+    if "condition_index" in st.session_state:
+        _debug_label = CONDITIONS[st.session_state["condition_index"]]["name"]
+    elif _key_routing:
+        _debug_label = "awaiting session code…"
+    else:
+        _debug_label = ""
+    subtitle_html = (
+        f'<div class="app-subtitle">Testing: {_debug_label}</div>'
+        if _debug_label else ""
+    )
+else:
+    subtitle_html = ""
+
 st.markdown(
     f'<div class="app-header">'
-    f'<div class="app-title">{STUDY_TITLE}</div>'
+    f'<div class="app-title">💬 {STUDY_TITLE}</div>'
     f'{subtitle_html}'
     f'</div>',
     unsafe_allow_html=True,
 )
+
+# ── Session code entry (keyword routing only) ────────────────────────────────────
+# Shown before the chat until the participant enters a valid code.
+# On page refresh the gate reappears, but the same code always maps to the same
+# condition, so the arm is stable - unlike random routing where refresh re-draws.
+if not st.session_state["key_accepted"]:
+    _key_map = {
+        CONDITIONS[i]["key"].strip().lower(): i
+        for i in range(N_CONDITIONS)
+    }
+    if WELCOME_MESSAGE:
+        st.markdown(
+            f'<div class="welcome-banner">{WELCOME_MESSAGE}</div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown(
+        f'<p style="margin-bottom:1rem;font-size:0.95rem;color:#1F2429">'
+        f'{KEY_ENTRY_PROMPT}</p>',
+        unsafe_allow_html=True,
+    )
+    with st.form("key_form"):
+        _code = st.text_input("Session code", placeholder="e.g. ALPHA")
+        _submitted = st.form_submit_button("Continue →", type="primary")
+    if _submitted:
+        _idx = _key_map.get(_code.strip().lower())
+        if _idx is not None:
+            st.session_state["condition_index"] = _idx
+            st.session_state["key_accepted"] = True
+            st.rerun()
+        else:
+            st.error("Code not recognised. Please check and try again.")
+    st.stop()
+
+# Session code accepted (or not required) — condition is now resolved.
+condition = CONDITIONS[st.session_state["condition_index"]]
 
 # ── End Chat button - appears after the first exchange ────────────────────────
 # Placed below the header so it does not compete with the title layout.
@@ -418,6 +506,10 @@ if not st.session_state["chat_ended"]:
                 response = st.write_stream(stream)
             except Exception as e:
                 response = None
+                # Remove the user message we just appended — leaving it in
+                # history without a paired assistant reply would send two
+                # consecutive user turns to the API on the next message.
+                st.session_state["messages"].pop()
                 st.error(
                     f"**Could not reach the LLM.** "
                     f"Check your `API_BASE_URL` and `OPENAI_API_KEY`.\n\n"
@@ -442,21 +534,18 @@ if not st.session_state["chat_ended"]:
 # =============================================================================
 #
 #  Shown after the participant clicks "End".
-#  The transcript is a JSON object with two keys:
-#    - "model":    the model used in this session (condition-level treatment)
+#  The transcript is a JSON object with one key:
 #    - "messages": a list of turns, each with role/content/timestamp
 #
 #  Parsing in Python:
 #      import json, pandas as pd
-#      data  = json.loads(transcript_string)
-#      model = data["model"]
-#      df    = pd.DataFrame(data["messages"])
+#      data = json.loads(transcript_string)
+#      df   = pd.DataFrame(data["messages"])  # one row per turn
 #
 #  Parsing in R:
 #      library(jsonlite)
-#      data  <- fromJSON(transcript_string)
-#      model <- data$model
-#      df    <- as.data.frame(data$messages)
+#      data <- fromJSON(transcript_string)
+#      df   <- as.data.frame(data$messages)   # one row per turn
 #
 #  Streamlit's st.code() block has a built-in copy button in the top-right
 #  corner - one click copies everything to the clipboard.
@@ -470,14 +559,14 @@ else:
     )
 
     # Build the transcript object.
-    # - "model" is saved at the top level because it is a condition-level
-    #   variable (the same model is used for every turn in a session).
-    #   In a multi-arm study this is the primary treatment identifier.
+    # - Condition name and model are intentionally omitted - participants see
+    #   this transcript and must not know which arm they were assigned to.
+    #   Treatment assignment is tracked in Qualtrics (via the session code),
+    #   not in the transcript itself.
     # - "user" is relabelled "participant" for clarity in the messages array.
     # - Timestamps are UTC ISO-8601 with explicit +00:00 offset, e.g.
     #   "2026-03-06T14:22:01.123456+00:00" - unambiguous across time zones.
     transcript = {
-        "model": condition["model"],
         "messages": [
             {
                 "role":      "participant" if m["role"] == "user" else "assistant",
