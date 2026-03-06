@@ -7,6 +7,18 @@ A lightweight Python app for running **chatbot surveys and experiments**.
 
 In both modes the participant chats, clicks **End**, and copies a JSON transcript back into your survey tool (e.g. Qualtrics). No server, no database — just configure and run.
 
+Entering the chatbot (this example shows a passcode needed for assigning to one of multiple experimental arms):
+
+<img width="744" height="393" alt="image" src="https://github.com/user-attachments/assets/64c0d4c4-9eca-4318-833f-e834cf178e1b" />
+
+Ongoing conversation:
+
+<img width="754" height="708" alt="image" src="https://github.com/user-attachments/assets/9e2d5a81-5782-46ad-afec-037e8225a3f7" />
+
+Participant copies and pastes the conversation back into the original survey tool (e.g. Qualtrics):
+
+<img width="775" height="745" alt="image" src="https://github.com/user-attachments/assets/433ae630-0894-4dee-9467-03c016562919" />
+
 ---
 
 ## Quick start
@@ -192,21 +204,4 @@ Add HTTPS via Caddy or nginx (required for Qualtrics embeds).
 
 **Port 8501 already in use** — Run `pkill -f "streamlit run"` then retry, or use `--server.port 8502`.
 
----
-
-## Citing
-
-If you use `surveychat` in published research, please cite the accompanying
-JOSS paper (replace with the DOI assigned after acceptance):
-
-```bibtex
-@article{surveychat,
-  title   = {surveychat: A {Streamlit} Platform for Chatbot Surveys
-             and Randomized Experiments},
-  author  = {Khanna, Saurabh},
-  journal = {Journal of Open Source Software},
-  year    = {2026},
-  doi     = {TODO},
-}
-```
 
