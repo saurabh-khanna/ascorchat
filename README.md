@@ -136,8 +136,3 @@ Add HTTPS via Caddy or nginx (required for Qualtrics embeds).
 
 **Port 8501 already in use** — Run `pkill -f "streamlit run"` then retry, or use `--server.port 8502`.
 
----
-
-## License
-
-[AGPL-3.0](LICENSE) — free to use and fork for academic research. Modifications must be released under the same license.
