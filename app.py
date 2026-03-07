@@ -122,12 +122,164 @@ import streamlit as st
 from openai import OpenAI
 from dotenv import load_dotenv          # reads .env into os.environ automatically
 
-# ── Local helpers (pure functions, independently testable) ────────────────────
-from helpers import check_passcode_routing, build_api_messages, build_transcript
-
 # Load the .env file so that OPENAI_API_KEY is available via os.environ
 # even when the app is run without pre-exporting it in the shell.
 load_dotenv()
+
+
+# =============================================================================
+#  HELPER FUNCTIONS
+# =============================================================================
+#
+#  Three helper functions used by the main interface below:
+#
+#  validate_passcode_routing(conditions, n_conditions)
+#    Checks that the passcode configuration is internally consistent and
+#    halts the app with an actionable error message if not.  Called during
+#    the configuration-validation phase, before any participant-facing UI
+#    is rendered.
+#
+#  build_api_messages(conversation, system_prompt)
+#    Constructs the full message list sent to the LLM API for each turn,
+#    prepending the hidden system prompt at position 0.
+#
+#  build_transcript(messages)
+#    Formats the conversation history as the JSON transcript object shown
+#    to the participant at the end of the session.
+
+def validate_passcode_routing(conditions: list, n_conditions: int) -> None:
+    """
+    Check passcode-routing configuration and halt the app on any inconsistency.
+
+    Enforces three invariants:
+      1. If any active condition defines a "passcode" field, every active
+         condition must define one (no partial configuration).
+      2. Every passcode value must be a non-empty string after stripping
+         leading and trailing whitespace.
+      3. All passcodes must be unique when compared case-insensitively.
+
+    Any violation triggers a descriptive on-screen error via st.error() and
+    stops execution with st.stop(), so researchers see the problem
+    immediately rather than discovering it mid-study.
+
+    Parameters
+    ----------
+    conditions : list[dict]
+        The full CONDITIONS list from the researcher configuration section.
+    n_conditions : int
+        The N_CONDITIONS value.  Only the first n_conditions entries are
+        considered active; any extras are ignored.
+    """
+    active    = conditions[:n_conditions]
+    passcoded = [c for c in active if "passcode" in c]
+
+    # Invariant 1: Partial configuration - some but not all conditions define
+    # a passcode.  Either every arm needs a passcode (passcode routing) or
+    # none do (random routing).  A mixed state is always a mistake.
+    if 0 < len(passcoded) < n_conditions:
+        st.error(
+            f"Passcode routing is partially configured: **{len(passcoded)}** of "
+            f"**{n_conditions}** active conditions have a `\"passcode\"` field. "
+            "Either add a `\"passcode\"` to every condition or remove them all."
+        )
+        st.stop()
+
+    if len(passcoded) == n_conditions:
+        # Invariant 2: No blank passcode strings.
+        if any(not c["passcode"].strip() for c in active):
+            st.error(
+                "One or more condition `\"passcode\"` values are empty strings. "
+                "Every passcode must contain at least one character."
+            )
+            st.stop()
+
+        # Invariant 3: All passcodes must be unique (case-insensitive).
+        passcodes = [c["passcode"].strip().lower() for c in active]
+        if len(passcodes) != len(set(passcodes)):
+            st.error(
+                "Two or more conditions share the same `\"passcode\"` value. "
+                "Every condition must have a unique passcode."
+            )
+            st.stop()
+
+
+def build_api_messages(conversation: list, system_prompt: str) -> list:
+    """
+    Construct the message list to send to the LLM API for a single turn.
+
+    The system prompt is inserted as a {"role": "system"} message at
+    position 0.  Participants never see this text, but it defines the
+    model's entire persona and behavioral instructions for the conversation.
+
+    Only "role" and "content" are forwarded from the conversation history.
+    The "timestamp" key is local-only metadata that the OpenAI API does not
+    accept and would cause a validation error if included.
+
+    Parameters
+    ----------
+    conversation : list[dict]
+        The current value of st.session_state["messages"].  Each element
+        has "role" ("user" or "assistant"), "content", and "timestamp" keys.
+    system_prompt : str
+        The hidden system prompt from the active condition dict.
+
+    Returns
+    -------
+    list[dict]
+        A list of {"role": str, "content": str} dicts ready for the OpenAI
+        chat completions endpoint (or any compatible API).
+    """
+    return (
+        [{"role": "system", "content": system_prompt}]
+        + [
+            {"role": m["role"], "content": m["content"]}
+            for m in conversation
+        ]
+    )
+
+
+def build_transcript(messages: list) -> dict:
+    """
+    Format the conversation history as the transcript object shown after chat ends.
+
+    Returns a JSON-serialisable dict with a single "messages" key.  Each
+    entry carries:
+      - "role"      : "participant" (relabelled from "user") or "assistant"
+      - "content"   : the full text of the message
+      - "timestamp" : UTC ISO-8601 string, e.g. "2026-03-06T14:22:01+00:00"
+
+    Design notes:
+      - "user" is relabelled "participant" so researchers get a domain-
+        appropriate label when parsing the transcript in Python or R.
+      - Condition name and model are intentionally excluded.  In experiment
+        mode, participants must not be able to infer their assigned condition
+        from the transcript they read and manually copy back into the survey.
+        Treatment assignment is recovered separately from the passcode stored
+        in the survey platform's response data.
+      - In survey mode (N_CONDITIONS = 1) there is only one condition, so
+        excluding the name is a no-op, but it keeps the transcript format
+        identical across both modes.
+
+    Parameters
+    ----------
+    messages : list[dict]
+        The current value of st.session_state["messages"].
+
+    Returns
+    -------
+    dict
+        Transcript object suitable for json.dumps(indent=2, ensure_ascii=False).
+    """
+    return {
+        "messages": [
+            {
+                "role":      "participant" if m["role"] == "user" else "assistant",
+                "content":   m["content"],
+                "timestamp": m.get("timestamp", ""),
+            }
+            for m in messages
+        ],
+    }
 
 
 # ╔═════════════════════════════════════════════════════════════════════════════╗
@@ -513,13 +665,9 @@ if len(CONDITIONS) < N_CONDITIONS:
     st.stop()
 
 # Validate passcode-routing configuration when N > 1.
-# check_passcode_routing() is a pure function in helpers.py; any error is
-# displayed here so the app halts before any participant-facing UI is shown.
+# Full logic is documented in validate_passcode_routing() above.
 if N_CONDITIONS > 1:
-    _ok, _err = check_passcode_routing(CONDITIONS, N_CONDITIONS)
-    if not _ok:
-        st.error(_err)
-        st.stop()
+    validate_passcode_routing(CONDITIONS, N_CONDITIONS)
 
 
 # =============================================================================
@@ -587,7 +735,7 @@ if "confirm_end" not in st.session_state:
     st.session_state["confirm_end"] = False
 
 # Flipped to True the moment the participant sends their first message.
-# The End Chat button is hidden until this is True to avoid showing a useless
+# The End button is hidden until this is True to avoid showing a useless
 # button before any conversation has happened.
 if "has_sent_message" not in st.session_state:
     st.session_state["has_sent_message"] = False
@@ -654,7 +802,7 @@ client = get_client(OPENAI_API_KEY, API_BASE_URL)
 #      a message; the user message is appended, then the LLM is called.
 #    • The response is streamed token-by-token via st.write_stream() to give
 #      a natural, responsive feel even on slow connections.
-#    • The End Chat button appears in a right-aligned column after the first
+#    • The End button appears in a right-aligned column after the first
 #      exchange.  A two-step confirmation (End → Confirm) prevents
 #      participants from accidentally discarding their conversation.
 #
@@ -758,12 +906,12 @@ if not st.session_state["chat_ended"]:
             "content": prompt,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        st.session_state["has_sent_message"] = True  # reveal End Chat button from now on
+        st.session_state["has_sent_message"] = True  # reveal End button from now on
         with st.chat_message("user"):
             st.markdown(prompt)
 
         # Build the full message list for the API call.
-        # See build_api_messages() in helpers.py for details.
+        # See build_api_messages() in the HELPER FUNCTIONS section for details.
         api_messages = build_api_messages(
             st.session_state["messages"],
             condition["system_prompt"],
@@ -783,17 +931,7 @@ if not st.session_state["chat_ended"]:
                 # Remove the user message we just appended - leaving it in
                 # history without a paired assistant reply would send two
                 # consecutive user turns to the API on the next message.
-                if (
-                    st.session_state["messages"]
-                    and st.session_state["messages"][-1]["role"] == "user"
-                ):
-                    st.session_state["messages"].pop()
-
-                # Keep this flag consistent with rolled-back history so the
-                # End Chat button is not shown when no message remains.
-                st.session_state["has_sent_message"] = bool(
-                    st.session_state["messages"]
-                )
+                st.session_state["messages"].pop()
                 st.error(
                     f"**Could not reach the LLM.** "
                     f"Check your `API_BASE_URL` and `OPENAI_API_KEY`.\n\n"
@@ -809,7 +947,7 @@ if not st.session_state["chat_ended"]:
             })
 
         # On the very first exchange, force a rerun so the header re-renders
-        # and the End Chat button becomes visible immediately.
+        # and the End button becomes visible immediately.
         if len(st.session_state["messages"]) == 2:
             st.rerun()
 
@@ -845,8 +983,8 @@ else:
     )
 
     # Build and render the transcript.
-    # See build_transcript() in helpers.py for design notes on why
-    # condition name/model are excluded and how the role label works.
+    # See build_transcript() in the HELPER FUNCTIONS section for design notes
+    # on why condition name/model are excluded and how the role label works.
     transcript = build_transcript(st.session_state["messages"])
 
     st.code(json.dumps(transcript, indent=2, ensure_ascii=False), language="json")
