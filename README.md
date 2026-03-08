@@ -3,7 +3,7 @@
 [![Open Source Love](https://badges.frapsoft.com/os/v1/open-source.svg?v=103)](https://github.com/ellerbrock/open-source-badges/)
 ![GitHub License](https://img.shields.io/github/license/surveychat/surveychat)
 
-A lightweight Python application for running **surveys and experiments with AI chatbots**. 
+`surveychat` is an open-source web application that enables researchers to administer surveys and conduct randomized experiments involving large language model (LLM)-based conversational agents, without the need to develop custom web application code. The system supports two primary operational modes: (i) **survey mode**, in which all participants interact with an identical chatbot configuration, and (ii) **experiment mode**, in which participants are randomly assigned to one of multiple chatbot conditions, each defined by a researcher-specified persona and language model. Upon completion of the interaction, participants receive an anonymized JSON transcript that contains only the role, content, and timestamp of each message. This transcript can be copied back into the parent survey platform (such as Qualtrics), within which the chatbot interface itself can also be directly embedded. The frontend of `surveychat` is implemented using Streamlit, and the entire application is configured via a single Python file. The system does not persist conversation data on its server and is compatible with any chat-completions-compatible API endpoint - including locally hosted models - thereby allowing researchers to retain full control over model selection, API usage, data jurisdiction, and adherence to ethical and regulatory requirements.
 
 surveychat works in two modes:
 
@@ -12,21 +12,19 @@ surveychat works in two modes:
 
 In both modes the participant chats, clicks **End chat**, and copies a text transcript back into your survey tool (e.g. Qualtrics). No coding experience beyond editing a text file is required - no server to manage, no database to set up.
 
-surveychat can be **embedded directly inside a Qualtrics survey** as an iFrame, so participants never leave the survey page. In survey mode, the chatbot loads directly on the page and participants start chatting straight away. In experiment mode, Qualtrics shows each participant their passcode first, then the chatbot loads below it on the same page.
+> **Demo:** Try an experimental setup [here](https://surveychat.invisible.info) — use code ALPHA for a neutral chatbot, and BETA for an empathetic chatbot. The demo uses the open-source model `gpt-oss-120b`.
 
-> Demo of an experimental setup [here](https://surveychat.invisible.info) - use code ALPHA for neutral chatbot, and BETA for empathetic chatbot.
+Entering a passcode (experiment mode only):
 
-Entering the chatbot (this example shows a passcode screen used in experiment mode):
+![Passcode entry](paper/surveychat-interface-1.png)
 
-<img width="744" height="393" alt="image" src="https://github.com/user-attachments/assets/64c0d4c4-9eca-4318-833f-e834cf178e1b" />
+Chatting with the bot:
 
-Ongoing conversation:
+![Chat interface](paper/surveychat-interface-2.png)
 
-<img width="754" height="708" alt="image" src="https://github.com/user-attachments/assets/9e2d5a81-5782-46ad-afec-037e8225a3f7" />
+Copying the transcript when done:
 
-Participant copies and pastes the conversation back into the original survey tool (e.g. Qualtrics):
-
-<img width="775" height="745" alt="image" src="https://github.com/user-attachments/assets/433ae630-0894-4dee-9467-03c016562919" />
+![Transcript export](paper/surveychat-interface-3.png)
 
 ---
 
@@ -35,7 +33,7 @@ Participant copies and pastes the conversation back into the original survey too
 You will need:
 
 - **Python 3.10 or newer.** Check by running `python3 --version` in your terminal. If you don't have Python, download it from [python.org](https://www.python.org/downloads/).
-- **An API key.** surveychat uses a large language model (LLM) to power the chatbot. You will need an API key from any compatible provider (OpenAI, Azure, OpenRouter, or a local proxy). The key is stored in the `OPENAI_API_KEY` environment variable by convention.
+- **An API key and endpoint.** surveychat uses a large language model (LLM) to power the chatbot. You will need an API key from any compatible provider (OpenAI, Azure, OpenRouter, or a local proxy). The key is stored in the `OPENAI_API_KEY` environment variable by convention. You will also set `API_BASE_URL` in `app.py` to point to your provider's chat-completions endpoint (see [Step 3 - Optional settings](#step-3---optional-settings)).
 - **A terminal.** On macOS/Linux open **Terminal**. On Windows open **Command Prompt** or **PowerShell**.
 
 ---
@@ -72,6 +70,8 @@ streamlit run app.py
 ```
 
 Your browser will open automatically at http://localhost:8501. You should see the chatbot interface.
+
+> **Note:** This URL only works on your own computer. To let participants access the chatbot, you will need to deploy it — see [Deployment](#deployment).
 
 ---
 
@@ -150,39 +150,32 @@ CONDITIONS = [
 ### Step 3 - Optional settings
 
 ```python
+API_BASE_URL = "https://api.openai.com/v1"
+# The base URL for your LLM provider's chat-completions endpoint.
+# Common values:
+#   OpenAI:       "https://api.openai.com/v1"
+#   OpenRouter:   "https://openrouter.ai/api/v1"
+#   HuggingFace:  "https://api-inference.huggingface.co/v1"
+#                 (set OPENAI_API_KEY to your HF token; set "model" to
+#                  the HF model ID, e.g. "meta-llama/Llama-3.3-70B-Instruct")
+#   Local model:  "http://localhost:1234/v1"
+# Any chat-completions-compatible endpoint will work.
+
 STUDY_TITLE = "surveychat"
 # The name shown in the browser tab and at the top of the page.
 # Change this to your study name, e.g. "Climate Attitudes Study".
 
-WELCOME_MESSAGE = ""
+WELCOME_MESSAGE = (
+    "You are about to have a short conversation with an AI assistant. "
+    "When you are finished, click the <strong>End chat</strong> button to receive your transcript, "
+    "then paste it back into the survey."
+)
 # A message shown to participants before they start chatting.
-# Leave as "" for no message, or write something like:
-# "Welcome. You will have a short conversation with an AI assistant.
-#  When you are done, click End this chat to receive your transcript."
+# Leave as "" for no message.
 
-PASSCODE_ENTRY_PROMPT = "Please enter the passcode you received in the survey to begin."
+PASSCODE_ENTRY_PROMPT = "Please enter the passcode you received in the survey to begin chatting."
 # The instruction shown above the passcode box (experiment mode only).
 ```
-
----
-
-## How it works
-
-### Survey mode (`N_CONDITIONS = 1`)
-
-1. Set `N_CONDITIONS = 1` and write your `system_prompt`
-2. Embed the app URL within Qualtrics for participants - no passcode needed
-3. They chat, click **End chat**, and copy the JSON transcript
-4. They paste the transcript into a Qualtrics text-entry question
-
-### Experiment mode (`N_CONDITIONS ≥ 2`)
-
-1. In Qualtrics, use **Survey Flow → Randomizer** to split participants into arms
-2. In each arm's branch, tell participants their passcode (e.g. *"Your passcode is: ALPHA"*) and show the app link
-3. They open the link, enter their passcode, and are routed to the right chatbot
-4. They chat, click **End chat**, and copy the JSON transcript
-5. They paste the transcript into a Qualtrics text-entry question
-6. When you export data, which condition each participant was in is known from which Qualtrics branch showed them their passcode
 
 ---
 
@@ -231,15 +224,19 @@ df   <- as.data.frame(data$messages)
 
 ## Deployment
 
-### Option 1 - Run locally on your own computer
+### Option 1 - Run locally
 
-This is the easiest option for testing or small studies where you can keep your laptop running.
+Good for small surveys on your own computer or trying things out before you deploy online.
 
 ```bash
 streamlit run app.py
 ```
 
-Share the URL that appears in the terminal with participants on the same network.
+Streamlit will show two URLs:
+- `http://localhost:8501` — works only on your computer.
+- `http://192.168.x.x:8501` — works on other devices on the same local network (e.g. your home or office Wi-Fi), but only if your firewall allows connections on port 8501.
+
+Neither URL is accessible from the internet, so this option is not suitable for sharing with participants remotely. For a publicly accessible URL, use one of the options below.
 
 ### Option 2 - Streamlit Community Cloud (free for public repos)
 
@@ -341,5 +338,3 @@ streamlit run app.py --server.port 8502
 
 **I edited `app.py` but nothing changed**
 Streamlit usually reloads automatically when you save the file. If it does not, press **R** in the terminal where the app is running, or stop and restart with `streamlit run app.py`.
-
-

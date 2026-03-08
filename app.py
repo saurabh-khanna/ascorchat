@@ -295,6 +295,11 @@ def build_transcript(messages: list) -> dict:
 #                    "https://api.openai.com/v1"
 #                - OpenRouter:
 #                    "https://openrouter.ai/api/v1"
+#                - HuggingFace Inference API:
+#                    "https://api-inference.huggingface.co/v1"
+#                  (set OPENAI_API_KEY to your HuggingFace token;
+#                   set "model" to the HF model ID, e.g.
+#                   "meta-llama/Llama-3.3-70B-Instruct")
 #
 #  The API key is read from OPENAI_API_KEY in the .env file - do not paste
 #  keys directly here.
@@ -502,7 +507,7 @@ STUDY_TITLE = "surveychat"
 #       )
 WELCOME_MESSAGE = (
     "You are about to have a short conversation with an AI assistant. "
-    "When you are finished, click the <strong>End</strong> button to receive your transcript, "
+    "When you are finished, click the <strong>End chat</strong> button to receive your transcript, "
     "then paste it back into the survey."
 )
 
