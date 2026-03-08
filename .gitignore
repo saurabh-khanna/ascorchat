@@ -197,3 +197,7 @@ cython_debug/
 secrets.toml
 .env
 .DS_Store
+
+# Paper files
+paper/jats/
+paper/paper.pdf
