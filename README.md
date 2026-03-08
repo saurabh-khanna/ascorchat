@@ -35,7 +35,7 @@ Participant copies and pastes the conversation back into the original survey too
 You will need:
 
 - **Python 3.10 or newer.** Check by running `python3 --version` in your terminal. If you don't have Python, download it from [python.org](https://www.python.org/downloads/).
-- **An API key.** surveychat uses a large language model (LLM) to power the chatbot. You will need an `OPENAI_API_KEY`.
+- **An API key.** surveychat uses a large language model (LLM) to power the chatbot. You will need an API key from any compatible provider (OpenAI, Azure, OpenRouter, or a local proxy). The key is stored in the `OPENAI_API_KEY` environment variable by convention.
 - **A terminal.** On macOS/Linux open **Terminal**. On Windows open **Command Prompt** or **PowerShell**.
 
 ---

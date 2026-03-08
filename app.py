@@ -89,8 +89,8 @@
 #
 #  LLM PROVIDERS
 #  -------------
-#  Set API_BASE_URL to any OpenAI-compatible endpoint:
-#      Standard OpenAI:   https://api.openai.com/v1
+#  Set API_BASE_URL to any chat-completions-compatible endpoint:
+#      OpenAI:            https://api.openai.com/v1
 #      Azure via LiteLLM: https://your-proxy.azurewebsites.net
 #      OpenRouter:        https://openrouter.ai/api/v1
 #      Local (LiteLLM):   http://localhost:4000
@@ -212,8 +212,8 @@ def build_api_messages(conversation: list, system_prompt: str) -> list:
     model's entire persona and behavioral instructions for the conversation.
 
     Only "role" and "content" are forwarded from the conversation history.
-    The "timestamp" key is local-only metadata that the OpenAI API does not
-    accept and would cause a validation error if included.
+    The "timestamp" key is local-only metadata that the chat completions API
+    does not accept and would cause a validation error if included.
 
     Parameters
     ----------
@@ -226,8 +226,8 @@ def build_api_messages(conversation: list, system_prompt: str) -> list:
     Returns
     -------
     list[dict]
-        A list of {"role": str, "content": str} dicts ready for the OpenAI
-        chat completions endpoint (or any compatible API).
+        A list of {"role": str, "content": str} dicts ready for the
+        chat completions endpoint.
     """
     return (
         [{"role": "system", "content": system_prompt}]
@@ -291,7 +291,7 @@ def build_transcript(messages: list) -> dict:
 #  API_BASE_URL  The base URL for your LLM API endpoint.
 #                - Azure LiteLLM proxy (default):
 #                    "https://ai-research-proxy.azurewebsites.net"
-#                - Standard OpenAI endpoint:
+#                - OpenAI:
 #                    "https://api.openai.com/v1"
 #                - OpenRouter:
 #                    "https://openrouter.ai/api/v1"
@@ -357,7 +357,7 @@ N_CONDITIONS = 2
 #  "model"          The model identifier string for this condition.
 #                   Common options:
 #                     "gpt-oss-120b"  - large open-weights model (default proxy)
-#                     "gpt4o"         - GPT-4o via OpenAI or Azure
+#                     "gpt4o"         - GPT-4o via OpenAI / Azure
 #                     "gpt4o-mini"    - GPT-4o Mini, faster and cheaper
 #                   Different conditions can use different models if you want
 #                   to directly compare model-level effects.
@@ -635,7 +635,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 #  ENVIRONMENT & CONFIGURATION VALIDATION
 # =============================================================================
 
-# Read the OpenAI API key from the environment (populated from .env above).
+# Read the API key from the environment (populated from .env above).
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # Fail fast with a clear, actionable error if the API key is missing or blank.
@@ -746,12 +746,12 @@ if "has_sent_message" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-# ── OpenAI client ─────────────────────────────────────────────────────────────
+# ── LLM client ────────────────────────────────────────────────────────────────
 
 @st.cache_resource
 def get_client(api_key: str, base_url: str) -> OpenAI:
     """
-    Create and cache a singleton OpenAI client.
+    Create and cache a singleton LLM client.
 
     @st.cache_resource creates the object once, shares it across all reruns
     and browser sessions on the same server, and never serialises it to disk.
@@ -767,7 +767,7 @@ def get_client(api_key: str, base_url: str) -> OpenAI:
     Returns
     -------
     OpenAI
-        A configured OpenAI client instance.
+        A configured client instance.
     """
     return OpenAI(api_key=api_key, base_url=base_url)
 

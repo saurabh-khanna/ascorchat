@@ -1,6 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite the article from preferred-citation."
 title: "surveychat"
+version: "1.0.0"
+date-released: "2026-03-06"
 type: software
 authors:
   - family-names: Khanna
@@ -11,7 +13,7 @@ license: AGPL-3.0
 repository-code: "https://github.com/surveychat/surveychat"
 preferred-citation:
   type: article
-  title: "surveychat: Chatbot Interface for Surveys and Randomized Experiments"
+  title: "surveychat: An Open-Source Platform for LLM-Based Conversational Surveys and Experiments"
   authors:
     - family-names: Khanna
       given-names: Saurabh

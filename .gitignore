@@ -197,6 +197,3 @@ cython_debug/
 secrets.toml
 .env
 .DS_Store
-
-# JOSS paper
-paper/
