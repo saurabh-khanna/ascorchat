@@ -842,7 +842,7 @@ if not st.session_state["passcode_accepted"]:
         unsafe_allow_html=True,
     )
     with st.form("key_form"):
-        _code = st.text_input("Passcode", placeholder="e.g. ALPHA")
+        _code = st.text_input("Passcode", placeholder="e.g. BETA")
         _submitted = st.form_submit_button("Continue →", type="primary")
     if _submitted:
         _idx = _passcode_map.get(_code.strip().lower())
