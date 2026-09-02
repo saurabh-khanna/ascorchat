@@ -132,7 +132,7 @@ from datetime import datetime, timezone
 
 # ── Third-party ───────────────────────────────────────────────────────────────
 import streamlit as st
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, BadRequestError, RateLimitError, InternalServerError, APIStatusError
 from dotenv import load_dotenv          # reads .env into os.environ automatically
 
 # Load the .env file so that OPENAI_API_KEY is available via os.environ
@@ -951,6 +951,15 @@ def get_client(api_key: str, base_url: str) -> OpenAI:
 client = get_client(OPENAI_API_KEY, API_BASE_URL)
 
 
+def _rollback_unanswered_user_message():
+    """Remove the latest user turn when the assistant reply failed."""
+    if (
+        st.session_state.get("messages")
+        and st.session_state["messages"][-1].get("role") == "user"
+    ):
+        st.session_state["messages"].pop()
+
+
 def generate_reply(active_condition: dict):
     """
     Stream the assistant's reply to the latest participant message into its own
@@ -990,48 +999,83 @@ def generate_reply(active_condition: dict):
 
     response = None
     with st.chat_message("assistant"):
+        # Per-condition temperature/max_tokens override the global defaults,
+        # falling back to TEMPERATURE and MAX_TOKENS if the condition dict
+        # does not define them.
+        call_kwargs = {
+            "model":    active_condition["model"],
+            "messages": api_messages,
+        }
+        temp    = active_condition.get("temperature", TEMPERATURE)
+        max_tok = active_condition.get("max_tokens",  MAX_TOKENS)
+        if temp is not None:
+            call_kwargs["temperature"] = temp
+        if max_tok is not None:
+            call_kwargs["max_tokens"] = max_tok
+
+        call_kwargs["stream"] = True
         try:
-            # Per-condition temperature/max_tokens override the global defaults,
-            # falling back to TEMPERATURE and MAX_TOKENS if the condition dict
-            # does not define them.
-            call_kwargs = {
-                "model":    active_condition["model"],
-                "messages": api_messages,
-            }
-            temp    = active_condition.get("temperature", TEMPERATURE)
-            max_tok = active_condition.get("max_tokens",  MAX_TOKENS)
-            if temp is not None:
-                call_kwargs["temperature"] = temp
-            if max_tok is not None:
-                call_kwargs["max_tokens"] = max_tok
-
-            call_kwargs["stream"] = True
             stream = client.chat.completions.create(**call_kwargs)
+        except APIConnectionError as e:
+            _rollback_unanswered_user_message()
+            # An underlying Exception, likely raised within httpx.
+            print(e.__cause__)
+            st.error("Error. Please contact the researchers.")
+            return None, user_turns
+        except BadRequestError as e:
+            _rollback_unanswered_user_message()
+            # Possibly content policy violation error
+            print(e)
+            st.error(
+                "Error. Possible content policy violation. "
+                "Please modify your prompt and retry. "
+                "Contact the researchers if the issue persists."
+            )
+            return None, user_turns
+        except (
+            RateLimitError,
+            InternalServerError
+        ) as e:
+            _rollback_unanswered_user_message()
+            # Errors for which user should retry first
+            print(e)
+            st.error(
+                "Error. Please wait a moment and try again."
+                "Contact the researchers if the issue persists."
+            )
+            return None, user_turns
+        except APIStatusError as e:
+            _rollback_unanswered_user_message()
+            # All other status codes
+            # Errors that need to be fixed by the researchers
+            print(e)
+            st.error(
+                "Error. Please contact the researchers."
+            )
+            return None, user_turns
 
-            def _throttled(s):
-                for chunk in s:
-                    yield chunk
-                    time.sleep(0.05)
+        def _throttled(s):
+            for chunk in s:
+                yield chunk
+                time.sleep(0.05)
 
+        try:
             response = st.write_stream(_throttled(stream))
-
             # Some proxy implementations return an empty stream instead of
             # raising an exception on error (e.g. rate-limit 429).  Treat an
             # empty response as a failure so the error handler fires.
             if not response:
                 raise RuntimeError(
-                    "The model returned an empty response. "
-                    "This may be a rate-limit or temporary API issue. "
-                    "Please wait a moment and try again."
+                    "LLM proxy returned an empty response."
+                    "This may be a rate-limit or temporary API issue."
                 )
-
         except Exception as e:
             response = None
-            st.session_state["messages"].pop()
+            _rollback_unanswered_user_message()
+            print(f"Error: `{e}`")
             st.error(
-                f"**Could not reach the LLM.** "
-                f"Check your `API_BASE_URL` and `OPENAI_API_KEY`.\n\n"
-                f"Error: `{e}`"
+                "Error. Please wait a moment and try again. "
+                "Contact the researchers if the issue persists."
             )
 
     if response:
