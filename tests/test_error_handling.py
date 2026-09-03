@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 import streamlit as st
 
-# Import the function under test and the mocked OpenAI module it uses.
+# Import the function under test and its directly imported exception classes.
 import app
 
 
@@ -49,7 +49,7 @@ def reset_session_state():
     st.session_state["messages"] = []
     st.error.reset_mock()
     with mock.patch.multiple(
-        app.openai,
+        app,
         APIConnectionError=ConnectionError,
         BadRequestError=BadRequestError,
         APIStatusError=StatusError,
@@ -87,7 +87,7 @@ def test_api_status_error(dummy_condition):
     with mock.patch(
         "app.client.chat.completions.create",
         # Use the base status error so this reaches app.py's final
-        # `except openai.APIStatusError` branch.
+        # `except APIStatusError` branch.
         side_effect=StatusError("Service unavailable"),
     ):
         response, user_turns = app.generate_reply(dummy_condition)
